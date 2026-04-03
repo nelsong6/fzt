@@ -17,6 +17,21 @@ type Entry struct {
 	Children    interface{} `yaml:"children,omitempty"` // []Entry or string (file path)
 }
 
+// LoadFromString parses YAML content directly without file I/O.
+// File-reference children (children: "path/to/file.yaml") are not supported
+// and will return an error.
+func LoadFromString(content string) ([]model.Item, error) {
+	var entries []Entry
+	if err := yaml.Unmarshal([]byte(content), &entries); err != nil {
+		return nil, fmt.Errorf("parsing YAML: %w", err)
+	}
+	var items []model.Item
+	if err := flatten(entries, "", 0, -1, "", &items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 // Load reads a YAML file and recursively resolves file pointers,
 // returning a flat list of model.Items with depth, parent, and children indices.
 func Load(path string) ([]model.Item, error) {
