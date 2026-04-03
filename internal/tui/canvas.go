@@ -42,7 +42,18 @@ type MemScreen struct {
 }
 
 // NewMemScreen creates a blank in-memory screen.
+// Dimensions are clamped to prevent catastrophic allocations.
 func NewMemScreen(w, h int) *MemScreen {
+	if w < 1 {
+		w = 1
+	} else if w > 500 {
+		w = 500
+	}
+	if h < 1 {
+		h = 1
+	} else if h > 200 {
+		h = 200
+	}
 	grid := make([][]rune, h)
 	styles := make([][]tcell.Style, h)
 	for y := 0; y < h; y++ {

@@ -202,169 +202,222 @@ func Run(items []model.Item, cfg Config) (string, error) {
 		ev := screen.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			switch ev.Key() {
-			case tcell.KeyEscape, tcell.KeyCtrlC:
-				s.cancelled = true
+			action := handleKeyEvent(s, ev.Key(), ev.Rune(), cfg, searchCols)
+			switch {
+			case action == "cancel":
 				return "", nil
-			case tcell.KeyEnter:
-				if s.index >= 0 && s.index < len(s.filtered) {
-					selected := s.filtered[s.index]
-					if selected.HasChildren && cfg.Tiered {
-						// Folder: drill in (same as Right)
-						parentIdx := findInAll(s.allItems, selected)
-						if parentIdx >= 0 {
-							s.scope[len(s.scope)-1].query = s.query
-							s.scope[len(s.scope)-1].cursor = s.cursor
-							s.scope[len(s.scope)-1].index = s.index
-							s.scope[len(s.scope)-1].offset = s.offset
-							s.scope = append(s.scope, scopeLevel{parentIdx: parentIdx})
-							s.items = childrenOf(s.allItems, parentIdx)
-							s.query = nil
-							s.cursor = 0
-							s.index = -1
-							s.offset = 0
-							filterItems(s, cfg, searchCols)
-						}
-					} else {
-						// Leaf: select and return
-						return formatOutput(selected, cfg), nil
-					}
-				}
-			case tcell.KeyBackspace, tcell.KeyBackspace2:
-				if s.cursor > 0 {
-					s.query = append(s.query[:s.cursor-1], s.query[s.cursor:]...)
-					s.cursor--
-					s.offset = 0
-					filterItems(s, cfg, searchCols)
-					if len(s.filtered) > 0 {
-						s.index = 0
-					} else {
-						s.index = -1
-					}
-				}
-			case tcell.KeyDelete:
-				if s.cursor < len(s.query) {
-					s.query = append(s.query[:s.cursor], s.query[s.cursor+1:]...)
-					filterItems(s, cfg, searchCols)
-				}
-			case tcell.KeyLeft:
-				if cfg.Tiered && len(s.query) == 0 && len(s.scope) > 1 {
-					// Go up one scope level, restore parent's selection
-					s.scope = s.scope[:len(s.scope)-1]
-					prev := s.scope[len(s.scope)-1]
-					if prev.parentIdx < 0 {
-						s.items = rootItems(s.allItems)
-					} else {
-						s.items = childrenOf(s.allItems, prev.parentIdx)
-					}
-					s.query = prev.query
-					s.cursor = prev.cursor
-					s.index = prev.index
-					s.offset = prev.offset
-					filterItems(s, cfg, searchCols)
-				} else if s.index >= 0 {
-					// Return to search bar from item selection
-					s.index = -1
-				} else if s.cursor > 0 {
-					s.cursor--
-				}
-			case tcell.KeyRight:
-				if s.index >= 0 && cfg.Tiered && len(s.query) == 0 && len(s.filtered) > 0 && s.filtered[s.index].HasChildren {
-					// Drill into selected item's children
-					selected := s.filtered[s.index]
-					parentIdx := findInAll(s.allItems, selected)
-					if parentIdx >= 0 {
-						s.scope[len(s.scope)-1].query = s.query
-						s.scope[len(s.scope)-1].cursor = s.cursor
-						s.scope[len(s.scope)-1].index = s.index
-						s.scope[len(s.scope)-1].offset = s.offset
-						s.scope = append(s.scope, scopeLevel{parentIdx: parentIdx})
-						s.items = childrenOf(s.allItems, parentIdx)
-						s.query = nil
-						s.cursor = 0
-						s.index = -1
-						s.offset = 0
-						filterItems(s, cfg, searchCols)
-					}
-				} else if s.index == -1 && s.cursor < len(s.query) {
-					s.cursor++
-				}
-			case tcell.KeyTab:
-				if len(s.filtered) > 0 {
-					if s.index < len(s.filtered)-1 {
-						s.index++
-					} else {
-						s.index = -1 // wrap to search bar
-					}
-				}
-			case tcell.KeyBacktab:
-				if len(s.filtered) > 0 {
-					if s.index == -1 {
-						s.index = len(s.filtered) - 1 // wrap to last item
-					} else if s.index > 0 {
-						s.index--
-					} else {
-						s.index = -1 // back to search bar
-					}
-				}
-			case tcell.KeyUp, tcell.KeyCtrlP:
-				if s.index > 0 {
-					s.index--
-				} else if s.index == 0 {
-					s.index = -1 // up from first item → search bar
-				}
-			case tcell.KeyDown, tcell.KeyCtrlN:
-				if s.index < len(s.filtered)-1 {
-					s.index++
-				}
-			case tcell.KeyCtrlA:
-				s.cursor = 0
-			case tcell.KeyCtrlE:
-				s.cursor = len(s.query)
-			case tcell.KeyCtrlU:
-				s.query = s.query[s.cursor:]
-				s.cursor = 0
-				s.offset = 0
-				filterItems(s, cfg, searchCols)
-				if len(s.filtered) > 0 {
-					s.index = 0
-				} else {
-					s.index = -1
-				}
-			case tcell.KeyCtrlW:
-				if s.cursor > 0 {
-					end := s.cursor
-					for s.cursor > 0 && s.query[s.cursor-1] == ' ' {
-						s.cursor--
-					}
-					for s.cursor > 0 && s.query[s.cursor-1] != ' ' {
-						s.cursor--
-					}
-					s.query = append(s.query[:s.cursor], s.query[end:]...)
-					s.offset = 0
-					filterItems(s, cfg, searchCols)
-					if len(s.filtered) > 0 {
-						s.index = 0
-					} else {
-						s.index = -1
-					}
-				}
-			case tcell.KeyRune:
-				ch := ev.Rune()
-				s.query = append(s.query[:s.cursor], append([]rune{ch}, s.query[s.cursor:]...)...)
-				s.cursor++
-				s.offset = 0
-				filterItems(s, cfg, searchCols)
-				if len(s.filtered) > 0 {
-					s.index = 0
-				} else {
-					s.index = -1
-				}
+			case len(action) > 7 && action[:7] == "select:":
+				return action[7:], nil
 			}
 		case *tcell.EventResize:
 			screen.Sync()
 		}
 	}
+}
+
+// handleKeyEvent processes a single key event against the TUI state.
+// Returns "" for normal continuation, "cancel" to quit, or "select:<output>" for leaf selection.
+func handleKeyEvent(s *state, key tcell.Key, ch rune, cfg Config, searchCols []int) string {
+	switch key {
+	case tcell.KeyCtrlC:
+		s.cancelled = true
+		return "cancel"
+
+	case tcell.KeyEscape:
+		if len(s.query) > 0 {
+			s.query = nil
+			s.cursor = 0
+			s.offset = 0
+			filterItems(s, cfg, searchCols)
+			if len(s.filtered) > 0 {
+				s.index = 0
+			} else {
+				s.index = -1
+			}
+			return ""
+		}
+		if cfg.Tiered && len(s.scope) > 1 {
+			s.scope = s.scope[:len(s.scope)-1]
+			prev := s.scope[len(s.scope)-1]
+			if prev.parentIdx < 0 {
+				s.items = rootItems(s.allItems)
+			} else {
+				s.items = childrenOf(s.allItems, prev.parentIdx)
+			}
+			s.query = prev.query
+			s.cursor = prev.cursor
+			s.index = prev.index
+			s.offset = prev.offset
+			filterItems(s, cfg, searchCols)
+			return ""
+		}
+		s.cancelled = true
+		return "cancel"
+
+	case tcell.KeyEnter:
+		if s.index >= 0 && s.index < len(s.filtered) {
+			selected := s.filtered[s.index]
+			if selected.HasChildren && cfg.Tiered {
+				parentIdx := findInAll(s.allItems, selected)
+				if parentIdx >= 0 {
+					s.scope[len(s.scope)-1].query = s.query
+					s.scope[len(s.scope)-1].cursor = s.cursor
+					s.scope[len(s.scope)-1].index = s.index
+					s.scope[len(s.scope)-1].offset = s.offset
+					s.scope = append(s.scope, scopeLevel{parentIdx: parentIdx})
+					s.items = childrenOf(s.allItems, parentIdx)
+					s.query = nil
+					s.cursor = 0
+					s.index = -1
+					s.offset = 0
+					filterItems(s, cfg, searchCols)
+				}
+			} else {
+				return "select:" + formatOutput(selected, cfg)
+			}
+		}
+
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if s.cursor > 0 {
+			s.query = append(s.query[:s.cursor-1], s.query[s.cursor:]...)
+			s.cursor--
+			s.offset = 0
+			filterItems(s, cfg, searchCols)
+			if len(s.filtered) > 0 {
+				s.index = 0
+			} else {
+				s.index = -1
+			}
+		}
+
+	case tcell.KeyDelete:
+		if s.cursor < len(s.query) {
+			s.query = append(s.query[:s.cursor], s.query[s.cursor+1:]...)
+			filterItems(s, cfg, searchCols)
+		}
+
+	case tcell.KeyLeft:
+		if cfg.Tiered && len(s.query) == 0 && len(s.scope) > 1 {
+			s.scope = s.scope[:len(s.scope)-1]
+			prev := s.scope[len(s.scope)-1]
+			if prev.parentIdx < 0 {
+				s.items = rootItems(s.allItems)
+			} else {
+				s.items = childrenOf(s.allItems, prev.parentIdx)
+			}
+			s.query = prev.query
+			s.cursor = prev.cursor
+			s.index = prev.index
+			s.offset = prev.offset
+			filterItems(s, cfg, searchCols)
+		} else if s.index >= 0 {
+			s.index = -1
+		} else if s.cursor > 0 {
+			s.cursor--
+		}
+
+	case tcell.KeyRight:
+		if s.index >= 0 && cfg.Tiered && len(s.query) == 0 && len(s.filtered) > 0 && s.filtered[s.index].HasChildren {
+			selected := s.filtered[s.index]
+			parentIdx := findInAll(s.allItems, selected)
+			if parentIdx >= 0 {
+				s.scope[len(s.scope)-1].query = s.query
+				s.scope[len(s.scope)-1].cursor = s.cursor
+				s.scope[len(s.scope)-1].index = s.index
+				s.scope[len(s.scope)-1].offset = s.offset
+				s.scope = append(s.scope, scopeLevel{parentIdx: parentIdx})
+				s.items = childrenOf(s.allItems, parentIdx)
+				s.query = nil
+				s.cursor = 0
+				s.index = -1
+				s.offset = 0
+				filterItems(s, cfg, searchCols)
+			}
+		} else if s.index == -1 && s.cursor < len(s.query) {
+			s.cursor++
+		}
+
+	case tcell.KeyTab:
+		if len(s.filtered) > 0 {
+			if s.index < len(s.filtered)-1 {
+				s.index++
+			} else {
+				s.index = -1
+			}
+		}
+
+	case tcell.KeyBacktab:
+		if len(s.filtered) > 0 {
+			if s.index == -1 {
+				s.index = len(s.filtered) - 1
+			} else if s.index > 0 {
+				s.index--
+			} else {
+				s.index = -1
+			}
+		}
+
+	case tcell.KeyUp, tcell.KeyCtrlP:
+		if s.index > 0 {
+			s.index--
+		} else if s.index == 0 {
+			s.index = -1
+		}
+
+	case tcell.KeyDown, tcell.KeyCtrlN:
+		if s.index < len(s.filtered)-1 {
+			s.index++
+		}
+
+	case tcell.KeyCtrlA:
+		s.cursor = 0
+
+	case tcell.KeyCtrlE:
+		s.cursor = len(s.query)
+
+	case tcell.KeyCtrlU:
+		s.query = s.query[s.cursor:]
+		s.cursor = 0
+		s.offset = 0
+		filterItems(s, cfg, searchCols)
+		if len(s.filtered) > 0 {
+			s.index = 0
+		} else {
+			s.index = -1
+		}
+
+	case tcell.KeyCtrlW:
+		if s.cursor > 0 {
+			end := s.cursor
+			for s.cursor > 0 && s.query[s.cursor-1] == ' ' {
+				s.cursor--
+			}
+			for s.cursor > 0 && s.query[s.cursor-1] != ' ' {
+				s.cursor--
+			}
+			s.query = append(s.query[:s.cursor], s.query[end:]...)
+			s.offset = 0
+			filterItems(s, cfg, searchCols)
+			if len(s.filtered) > 0 {
+				s.index = 0
+			} else {
+				s.index = -1
+			}
+		}
+
+	case tcell.KeyRune:
+		s.query = append(s.query[:s.cursor], append([]rune{ch}, s.query[s.cursor:]...)...)
+		s.cursor++
+		s.offset = 0
+		filterItems(s, cfg, searchCols)
+		if len(s.filtered) > 0 {
+			s.index = 0
+		} else {
+			s.index = -1
+		}
+	}
+
+	return ""
 }
 
 // Simulate runs a headless simulation: renders the initial frame, then one frame

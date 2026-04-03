@@ -3,46 +3,30 @@
 package main
 
 import (
-	"encoding/json"
-	"sort"
-	"strings"
 	"syscall/js"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/nelsong6/fzh/internal/model"
-	"github.com/nelsong6/fzh/internal/scorer"
+	"github.com/nelsong6/fzh/internal/tui"
 	"github.com/nelsong6/fzh/internal/yamlsrc"
 )
 
-var currentItems []model.Item
-
-type jsItem struct {
-	Name         string  `json:"name"`
-	Description  string  `json:"description,omitempty"`
-	Depth        int     `json:"depth"`
-	HasChildren  bool    `json:"hasChildren"`
-	Path         string  `json:"path"`
-	ParentIdx    int     `json:"parentIdx"`
-	Children     []int   `json:"children,omitempty"`
-	Score        jsScore `json:"score"`
-	MatchIndices [][]int `json:"matchIndices,omitempty"`
-	Index        int     `json:"index"`
-}
-
-type jsScore struct {
-	Name     int `json:"name"`
-	Desc     int `json:"desc"`
-	Ancestor int `json:"ancestor"`
-}
+var (
+	currentItems []model.Item
+	session      *tui.Session
+)
 
 func main() {
 	js.Global().Set("fzh", js.ValueOf(map[string]interface{}{
-		"loadYAML":    js.FuncOf(loadYAML),
-		"filter":      js.FuncOf(filter),
-		"getChildren": js.FuncOf(getChildren),
+		"init":      js.FuncOf(initSession),
+		"handleKey": js.FuncOf(handleKey),
+		"resize":    js.FuncOf(resize),
+		"loadYAML":  js.FuncOf(loadYAML),
 	}))
 	select {}
 }
 
+// loadYAML parses YAML and stores items, but does not create a session.
 func loadYAML(this js.Value, args []js.Value) interface{} {
 	if len(args) < 1 {
 		return jsError("loadYAML requires a YAML string argument")
@@ -52,170 +36,148 @@ func loadYAML(this js.Value, args []js.Value) interface{} {
 		return jsError(err.Error())
 	}
 	currentItems = items
-	return toJSArray(itemsToJS(items, nil))
+	return js.Null()
 }
 
-func filter(this js.Value, args []js.Value) interface{} {
-	if len(args) < 1 {
-		return jsError("filter requires a query string")
+// initSession creates a new headless TUI session.
+// Args: cols (int), rows (int)
+// Returns: {ansi: string, cursorX: int, cursorY: int}
+func initSession(this js.Value, args []js.Value) interface{} {
+	if len(args) < 2 {
+		return jsError("init requires (cols, rows)")
 	}
-	query := args[0].String()
+	cols := args[0].Int()
+	rows := args[1].Int()
 
-	depthPenalty := 5
-	parentIdx := -1
-	if len(args) > 1 && args[1].Type() == js.TypeObject {
-		opts := args[1]
-		if v := opts.Get("depthPenalty"); v.Type() == js.TypeNumber {
-			depthPenalty = v.Int()
-		}
-		if v := opts.Get("parentIdx"); v.Type() == js.TypeNumber {
-			parentIdx = v.Int()
-		}
+	if len(currentItems) == 0 {
+		return jsError("no items loaded — call loadYAML first")
 	}
 
-	if query == "" {
-		return toJSArray(scopeItems(parentIdx))
+	cfg := tui.Config{
+		Layout:       "reverse",
+		Border:       true,
+		Tiered:       true,
+		DepthPenalty: 5,
 	}
 
-	searchPool := currentItems
-	if parentIdx >= 0 {
-		searchPool = descendantsOf(currentItems, parentIdx)
-	}
-
-	type scored struct {
-		item    model.Item
-		index   int
-		ts      scorer.TieredScore
-		indices [][]int
-	}
-
-	var matched []scored
-	for i, item := range searchPool {
-		idx := i
-		if parentIdx >= 0 {
-			idx = findOriginalIndex(item)
-		}
-		ancestors := getAncestorNames(currentItems, item)
-		ts, indices := scorer.ScoreItem(item.Fields, query, nil, ancestors)
-		if indices != nil {
-			ts.Name -= item.Depth * depthPenalty
-			item.Score = ts
-			item.MatchIndices = indices
-			matched = append(matched, scored{item, idx, ts, indices})
-		}
-	}
-
-	sort.SliceStable(matched, func(i, j int) bool {
-		return matched[j].ts.Less(matched[i].ts)
-	})
-
-	result := make([]jsItem, len(matched))
-	for i, m := range matched {
-		result[i] = modelToJS(m.item, m.index)
-		result[i].Score = jsScore{m.ts.Name, m.ts.Desc, m.ts.Ancestor}
-		result[i].MatchIndices = m.indices
-	}
-	return toJSArray(result)
+	session = tui.NewSession(currentItems, cfg, cols, rows)
+	frame := session.Render()
+	return frameToJS(frame)
 }
 
-func getChildren(this js.Value, args []js.Value) interface{} {
-	if len(args) < 1 {
-		return jsError("getChildren requires a parent index")
+// handleKey processes a keyboard event.
+// Args: key (string, e.g. "ArrowUp", "Enter", "a"), ctrl (bool), shift (bool)
+// Returns: {ansi: string, cursorX: int, cursorY: int, action: string}
+func handleKey(this js.Value, args []js.Value) interface{} {
+	if session == nil {
+		return jsError("session not initialized")
 	}
-	parentIdx := args[0].Int()
-	return toJSArray(scopeItems(parentIdx))
+	if len(args) < 3 {
+		return jsError("handleKey requires (key, ctrl, shift)")
+	}
+
+	keyStr := args[0].String()
+	ctrl := args[1].Bool()
+	shift := args[2].Bool()
+
+	key, ch := translateKey(keyStr, ctrl, shift)
+	if key == tcell.KeyRune && ch == 0 {
+		// Unrecognized key — ignore
+		return js.Null()
+	}
+
+	frame, action := session.HandleKey(key, ch)
+
+	obj := js.Global().Get("Object").New()
+	obj.Set("ansi", frame.ANSI)
+	obj.Set("cursorX", frame.CursorX)
+	obj.Set("cursorY", frame.CursorY)
+	obj.Set("action", action)
+	return obj
 }
 
-func scopeItems(parentIdx int) []jsItem {
-	var result []jsItem
-	if parentIdx < 0 {
-		for i, item := range currentItems {
-			if item.Depth == 0 {
-				result = append(result, modelToJS(item, i))
+// resize changes the terminal dimensions.
+// Args: cols (int), rows (int)
+// Returns: {ansi: string, cursorX: int, cursorY: int}
+func resize(this js.Value, args []js.Value) interface{} {
+	if session == nil {
+		return jsError("session not initialized")
+	}
+	if len(args) < 2 {
+		return jsError("resize requires (cols, rows)")
+	}
+	cols := args[0].Int()
+	rows := args[1].Int()
+
+	frame := session.Resize(cols, rows)
+	return frameToJS(frame)
+}
+
+// translateKey maps browser key event properties to tcell key + rune.
+func translateKey(key string, ctrl, shift bool) (tcell.Key, rune) {
+	switch key {
+	case "ArrowUp":
+		return tcell.KeyUp, 0
+	case "ArrowDown":
+		return tcell.KeyDown, 0
+	case "ArrowLeft":
+		return tcell.KeyLeft, 0
+	case "ArrowRight":
+		return tcell.KeyRight, 0
+	case "Enter":
+		return tcell.KeyEnter, 0
+	case "Escape":
+		return tcell.KeyEscape, 0
+	case "Backspace":
+		return tcell.KeyBackspace2, 0
+	case "Delete":
+		return tcell.KeyDelete, 0
+	case "Tab":
+		if shift {
+			return tcell.KeyBacktab, 0
+		}
+		return tcell.KeyTab, 0
+	case "Home":
+		return tcell.KeyCtrlA, 0
+	case "End":
+		return tcell.KeyCtrlE, 0
+	}
+
+	// Single character keys
+	if len(key) == 1 {
+		r := rune(key[0])
+		if ctrl {
+			switch r {
+			case 'a', 'A':
+				return tcell.KeyCtrlA, 0
+			case 'e', 'E':
+				return tcell.KeyCtrlE, 0
+			case 'u', 'U':
+				return tcell.KeyCtrlU, 0
+			case 'w', 'W':
+				return tcell.KeyCtrlW, 0
+			case 'p', 'P':
+				return tcell.KeyCtrlP, 0
+			case 'n', 'N':
+				return tcell.KeyCtrlN, 0
+			case 'c', 'C':
+				return tcell.KeyCtrlC, 0
 			}
+			return tcell.KeyRune, 0 // unknown ctrl combo — ignore
 		}
-	} else if parentIdx < len(currentItems) {
-		for _, childIdx := range currentItems[parentIdx].Children {
-			if childIdx < len(currentItems) {
-				result = append(result, modelToJS(currentItems[childIdx], childIdx))
-			}
-		}
+		return tcell.KeyRune, r
 	}
-	return result
+
+	// Multi-character key name we don't handle (Shift, Control, etc.)
+	return tcell.KeyRune, 0
 }
 
-func descendantsOf(items []model.Item, parentIdx int) []model.Item {
-	if parentIdx < 0 {
-		return items
-	}
-	var result []model.Item
-	var collect func(idx int)
-	collect = func(idx int) {
-		for _, childIdx := range items[idx].Children {
-			if childIdx < len(items) {
-				result = append(result, items[childIdx])
-				collect(childIdx)
-			}
-		}
-	}
-	collect(parentIdx)
-	return result
-}
-
-func findOriginalIndex(item model.Item) int {
-	for i, ci := range currentItems {
-		if ci.Path == item.Path && ci.Fields[0] == item.Fields[0] {
-			return i
-		}
-	}
-	return -1
-}
-
-func getAncestorNames(items []model.Item, item model.Item) []string {
-	var names []string
-	idx := item.ParentIdx
-	seen := make(map[int]bool)
-	for idx >= 0 && idx < len(items) && !seen[idx] {
-		seen[idx] = true
-		if len(items[idx].Fields) > 0 {
-			names = append(names, items[idx].Fields[0])
-		}
-		idx = items[idx].ParentIdx
-	}
-	return names
-}
-
-func itemsToJS(items []model.Item, indices [][]int) []jsItem {
-	result := make([]jsItem, len(items))
-	for i, item := range items {
-		result[i] = modelToJS(item, i)
-	}
-	return result
-}
-
-func modelToJS(item model.Item, index int) jsItem {
-	ji := jsItem{
-		Name:        item.Fields[0],
-		Depth:       item.Depth,
-		HasChildren: item.HasChildren,
-		Path:        item.Path,
-		ParentIdx:   item.ParentIdx,
-		Children:    item.Children,
-		Index:       index,
-		Score:       jsScore{item.Score.Name, item.Score.Desc, item.Score.Ancestor},
-	}
-	if len(item.Fields) > 1 {
-		ji.Description = strings.Join(item.Fields[1:], " ")
-	}
-	if item.MatchIndices != nil {
-		ji.MatchIndices = item.MatchIndices
-	}
-	return ji
-}
-
-func toJSArray(items []jsItem) interface{} {
-	data, _ := json.Marshal(items)
-	return js.Global().Get("JSON").Call("parse", string(data))
+func frameToJS(frame tui.SessionFrame) interface{} {
+	obj := js.Global().Get("Object").New()
+	obj.Set("ansi", frame.ANSI)
+	obj.Set("cursorX", frame.CursorX)
+	obj.Set("cursorY", frame.CursorY)
+	return obj
 }
 
 func jsError(msg string) interface{} {
