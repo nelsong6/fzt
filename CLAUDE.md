@@ -84,3 +84,4 @@ New: `--tiered`, `--depth-penalty`, `--search-cols`, `--ansi`
 ### 2026-04-03
 
 - **WASM header injection** (`cmd/wasm/main.go`): `initSession` now prepends a header item (`Fields: ["Name", "Description"]`, `Depth: -1`) and sets `HeaderLines: 1` in the TUI config — matching the CLI's `--header` behavior in `cmd/root.go`. Previously the WASM bridge skipped header injection entirely, so the fuzzy-tiers-showcase was missing the column headers that the terminal version displayed.
+- **WASM session starts with no selection** (`internal/tui/session.go`): `NewSession` now sets `s.index = -1` instead of auto-selecting index 0. The prompt starts empty and ready for typing — no item is highlighted until the user navigates or types a query. Requested for my-homepage integration where the terminal is always visible and auto-selecting felt wrong.

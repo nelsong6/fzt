@@ -25,10 +25,8 @@ type SessionFrame struct {
 // NewSession creates a headless TUI session with the given items, config, and dimensions.
 func NewSession(items []model.Item, cfg Config, w, h int) *Session {
 	s, searchCols := initState(items, cfg)
-	// Auto-select first item like the terminal TUI does when typing
-	if len(s.filtered) > 0 {
-		s.index = 0
-	}
+	// Start with no selection — prompt is empty and ready for typing
+	s.index = -1
 	return &Session{
 		state:      s,
 		cfg:        cfg,
