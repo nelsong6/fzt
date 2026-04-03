@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/nelsong6/fzh/internal/column"
+	"github.com/nelsong6/fzh/internal/model"
 	"github.com/nelsong6/fzh/internal/tui"
+	"github.com/nelsong6/fzh/internal/yamlsrc"
 	"github.com/spf13/cobra"
 )
 
@@ -44,6 +46,7 @@ var (
 	flagRecord       string
 	flagStyled       bool
 	flagANSI         bool
+	flagYAML         string
 )
 
 func init() {
@@ -68,6 +71,7 @@ func init() {
 	rootCmd.Flags().StringVar(&flagRecord, "record", "", "Write rendered frames to this file (used with --simulate)")
 	rootCmd.Flags().BoolVar(&flagStyled, "styled", false, "Include style markers [H]=highlight [S]=selected in frame output")
 	rootCmd.Flags().BoolVar(&flagANSI, "ansi", false, "Parse and preserve ANSI color codes from input")
+	rootCmd.Flags().StringVar(&flagYAML, "yaml", "", "Load hierarchical data from a YAML file (enables --tiered automatically)")
 }
 
 func Execute() {
@@ -78,25 +82,44 @@ func Execute() {
 }
 
 func run(cmd *cobra.Command, args []string) error {
-	// Read stdin
-	lines, err := readStdin()
-	if err != nil {
-		return fmt.Errorf("reading stdin: %w", err)
-	}
-	if len(lines) == 0 {
-		return nil
-	}
+	var items []model.Item
 
-	// If --header is set, prepend it as a line
-	if flagHeader != "" {
-		lines = append([]string{flagHeader}, lines...)
-		if flagHeaderLines == 0 {
-			flagHeaderLines = 1
+	if flagYAML != "" {
+		// YAML mode: load from file, auto-enable tiered scoring
+		var err error
+		items, err = yamlsrc.Load(flagYAML)
+		if err != nil {
+			return fmt.Errorf("loading yaml: %w", err)
 		}
-	}
+		flagTiered = true
+		// Inject header if provided
+		if flagHeader != "" {
+			headerFields := strings.Split(flagHeader, flagDelimiter)
+			headerItem := model.Item{Fields: headerFields, Depth: -1}
+			items = append([]model.Item{headerItem}, items...)
+			if flagHeaderLines == 0 {
+				flagHeaderLines = 1
+			}
+		}
+	} else {
+		// Stdin mode
+		lines, err := readStdin()
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+		if len(lines) == 0 {
+			return nil
+		}
 
-	// Parse into items
-	items := column.ParseLines(lines, flagDelimiter, flagTiered, flagANSI)
+		if flagHeader != "" {
+			lines = append([]string{flagHeader}, lines...)
+			if flagHeaderLines == 0 {
+				flagHeaderLines = 1
+			}
+		}
+
+		items = column.ParseLines(lines, flagDelimiter, flagTiered, flagANSI)
+	}
 
 	// Build config
 	cfg := tui.Config{

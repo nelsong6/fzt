@@ -1,6 +1,9 @@
 package model
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"github.com/gdamore/tcell/v2"
+	"github.com/nelsong6/fzh/internal/scorer"
+)
 
 // StyledRune is a single character with its ANSI-derived style.
 type StyledRune struct {
@@ -14,7 +17,11 @@ type Item struct {
 	DisplayFields []string      // original field values with ANSI codes preserved
 	StyledFields  [][]StyledRune // parsed ANSI: each field as styled runes (nil if --ansi not used)
 	Depth         int           // hierarchy depth (0 = top level), only used with --tiered
-	Score         int           // computed fuzzy match score
+	Score         scorer.TieredScore // computed fuzzy match score
 	MatchIndices  [][]int       // per-field match indices for highlighting
 	Original      string        // the original unsplit line
+	Children      []int         // indices of direct children in the flat items slice
+	ParentIdx     int           // index of parent in the flat items slice (-1 for root)
+	HasChildren   bool          // true if this item has children
+	Path          string        // breadcrumb path (e.g. "git › gitprune") for nested items
 }

@@ -8,6 +8,7 @@ type Canvas interface {
 	SetContent(x, y int, primary rune, combining []rune, style tcell.Style)
 	Size() (int, int)
 	ShowCursor(x, y int)
+	HideCursor()
 }
 
 // tcellCanvas wraps a real tcell.Screen to satisfy Canvas.
@@ -25,6 +26,10 @@ func (c *tcellCanvas) Size() (int, int) {
 
 func (c *tcellCanvas) ShowCursor(x, y int) {
 	c.screen.ShowCursor(x, y)
+}
+
+func (c *tcellCanvas) HideCursor() {
+	c.screen.HideCursor()
 }
 
 // MemScreen is a headless in-memory screen for simulation/testing.
@@ -64,6 +69,11 @@ func (m *MemScreen) Size() (int, int) {
 func (m *MemScreen) ShowCursor(x, y int) {
 	m.CursorX = x
 	m.CursorY = y
+}
+
+func (m *MemScreen) HideCursor() {
+	m.CursorX = -1
+	m.CursorY = -1
 }
 
 // Clear resets all cells to spaces.

@@ -42,6 +42,7 @@ func parseLine(line, delimiter string, tiered bool, ansi bool) model.Item {
 		DisplayFields: displayParts,
 		Depth:         depth,
 		Original:      line,
+		ParentIdx:     -1,
 	}
 
 	if ansi {
