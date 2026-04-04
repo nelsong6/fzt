@@ -82,6 +82,10 @@ func init() {
 }
 
 func Execute() {
+	if tui.Version == "UNSET" {
+		fmt.Fprintln(os.Stderr, "fzt: version not set — binary was built incorrectly. Use 'go run ./build' instead of 'go build'.")
+		os.Exit(1)
+	}
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

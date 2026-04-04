@@ -25,7 +25,7 @@ type SessionFrame struct {
 // NewSession creates a headless TUI session with the given items, config, and dimensions.
 func NewSession(items []model.Item, cfg Config, w, h int) *Session {
 	s, searchCols := initState(items, cfg)
-	s.index = -1
+	s.topCtx().index = -1
 	return &Session{
 		state:      s,
 		cfg:        cfg,
@@ -37,11 +37,12 @@ func NewSession(items []model.Item, cfg Config, w, h int) *Session {
 // NewTreeSession creates a headless TUI session in unified tree+search mode.
 func NewTreeSession(items []model.Item, cfg Config, w, h int) *Session {
 	s, searchCols := initState(items, cfg)
-	s.index = -1
-	s.treeExpanded = make(map[int]bool)
-	s.queryExpanded = make(map[int]bool)
-	s.treeCursor = -1
-	s.treeOffset = 0
+	ctx := s.topCtx()
+	ctx.index = -1
+	ctx.treeExpanded = make(map[int]bool)
+	ctx.queryExpanded = make(map[int]bool)
+	ctx.treeCursor = -1
+	ctx.treeOffset = 0
 	return &Session{
 		state:      s,
 		cfg:        cfg,
@@ -53,7 +54,8 @@ func NewTreeSession(items []model.Item, cfg Config, w, h int) *Session {
 // Render draws the current state onto the MemScreen and returns an ANSI frame.
 func (sess *Session) Render() SessionFrame {
 	sess.screen.Clear()
-	if sess.state.treeExpanded != nil {
+	ctx := sess.state.topCtx()
+	if ctx.treeExpanded != nil {
 		w, h := sess.screen.Size()
 		drawUnified(sess.screen, sess.state, sess.cfg, w, 0, h)
 	} else {
@@ -75,7 +77,8 @@ func (sess *Session) Resize(w, h int) SessionFrame {
 // HandleKey processes a key event and returns the new frame.
 func (sess *Session) HandleKey(key tcell.Key, ch rune) (SessionFrame, string) {
 	var action string
-	if sess.state.treeExpanded != nil {
+	ctx := sess.state.topCtx()
+	if ctx.treeExpanded != nil {
 		action = handleUnifiedKey(sess.state, key, ch, sess.cfg, sess.searchCols)
 	} else {
 		action = handleKeyEvent(sess.state, key, ch, sess.cfg, sess.searchCols)
@@ -86,7 +89,8 @@ func (sess *Session) HandleKey(key tcell.Key, ch rune) (SessionFrame, string) {
 
 // ClickRow handles a mouse click on a visual row in unified mode.
 func (sess *Session) ClickRow(row int) (SessionFrame, string) {
-	if sess.state.treeExpanded == nil {
+	ctx := sess.state.topCtx()
+	if ctx.treeExpanded == nil {
 		return sess.Render(), ""
 	}
 	_, h := sess.screen.Size()
@@ -98,16 +102,17 @@ func (sess *Session) ClickRow(row int) (SessionFrame, string) {
 // SelectedURL returns the URL of the currently selected item, if any.
 func (sess *Session) SelectedURL() string {
 	s := sess.state
-	if s.treeExpanded != nil {
+	ctx := s.topCtx()
+	if ctx.treeExpanded != nil {
 		// Unified mode: tree cursor is the only selection
 		visible := treeVisibleItems(s)
-		if s.treeCursor >= 0 && s.treeCursor < len(visible) {
-			return visible[s.treeCursor].item.URL
+		if ctx.treeCursor >= 0 && ctx.treeCursor < len(visible) {
+			return visible[ctx.treeCursor].item.URL
 		}
 		return ""
 	}
-	if s.index >= 0 && s.index < len(s.filtered) {
-		return s.filtered[s.index].URL
+	if ctx.index >= 0 && ctx.index < len(ctx.filtered) {
+		return ctx.filtered[ctx.index].URL
 	}
 	return ""
 }

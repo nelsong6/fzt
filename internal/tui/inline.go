@@ -48,10 +48,11 @@ func RunInline(items []model.Item, cfg Config) (string, error) {
 
 	// Initialize tree state if tree mode
 	if inlineCfg.TreeMode {
-		s.treeExpanded = make(map[int]bool)
-		s.queryExpanded = make(map[int]bool)
-		s.treeCursor = -1
-		s.treeOffset = 0
+		ctx := s.topCtx()
+		ctx.treeExpanded = make(map[int]bool)
+		ctx.queryExpanded = make(map[int]bool)
+		ctx.treeCursor = -1
+		ctx.treeOffset = 0
 	}
 
 	// Track cursor row relative to top of reserved region so we can
