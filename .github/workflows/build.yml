@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build:
@@ -16,18 +17,25 @@ jobs:
           - goos: windows
             goarch: amd64
             ext: .exe
+            package: .
           - goos: linux
             goarch: amd64
             ext: ""
+            package: .
           - goos: darwin
             goarch: arm64
             ext: ""
+            package: .
+          - goos: js
+            goarch: wasm
+            ext: .wasm
+            package: ./cmd/wasm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go build -o fzt${{ matrix.ext }} .
+      - run: go build -o fzt${{ matrix.ext }} ${{ matrix.package }}
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -53,6 +61,7 @@ jobs:
           cp artifacts/fzt-windows-amd64/fzt.exe release/fzt-windows-amd64.exe
           cp artifacts/fzt-linux-amd64/fzt release/fzt-linux-amd64
           cp artifacts/fzt-darwin-arm64/fzt release/fzt-darwin-arm64
+          cp artifacts/fzt-js-wasm/fzt.wasm release/fzt.wasm
       - name: Create versioned release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -68,3 +77,40 @@ jobs:
             -R ${{ github.repository }} \
             --title "$next" \
             --notes "$(git log --oneline -1)"
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.ARM_CLIENT_ID }}
+          tenant-id: ${{ vars.ARM_TENANT_ID }}
+          subscription-id: ${{ vars.ARM_SUBSCRIPTION_ID }}
+
+      - name: Get GitHub App credentials from Key Vault
+        id: app-creds
+        run: |
+          APP_ID=$(az keyvault secret show --vault-name ${{ vars.KEY_VAULT_NAME }} --name github-app-id --query value -o tsv)
+          echo "::add-mask::$APP_ID"
+          echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
+          PRIVATE_KEY=$(az keyvault secret show --vault-name ${{ vars.KEY_VAULT_NAME }} --name github-app-private-key --query value -o tsv)
+          echo "::add-mask::$PRIVATE_KEY"
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "private_key<<$EOF" >> $GITHUB_OUTPUT
+          echo "$PRIVATE_KEY" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ steps.app-creds.outputs.app_id }}
+          private-key: ${{ steps.app-creds.outputs.private_key }}
+          repositories: fuzzy-tiers-showcase,my-homepage
+
+      - name: Notify downstream repos
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          for repo in nelsong6/fuzzy-tiers-showcase nelsong6/my-homepage; do
+            gh api repos/$repo/dispatches \
+              -f event_type=fzt-updated
+          done
