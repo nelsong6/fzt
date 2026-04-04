@@ -254,12 +254,18 @@ func handleTreeKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []in
 		return "", false
 
 	case tcell.KeyEscape:
-		// Exit nav mode, clear query, deselect — return to empty search state
+		// Pop context if stacked (e.g. command mode)
+		if len(s.contexts) > 1 {
+			popContext(s)
+			return "", false
+		}
+		// Root context: exit nav mode, clear query, deselect, collapse all
 		ctx.navMode = false
 		ctx.searchActive = false
 		ctx.query = nil
 		ctx.cursor = 0
 		ctx.treeCursor = -1
+		ctx.treeExpanded = make(map[int]bool)
 		ctx.queryExpanded = make(map[int]bool)
 		return "", false
 
@@ -339,17 +345,25 @@ func handleSearchKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []
 
 	case tcell.KeyTab:
 		// Autocomplete: set query to the top match's name.
+		// If the match is a folder, push scope (same as typing name + Space).
 		if len(ctx.filtered) > 0 && len(ctx.filtered[0].Fields) > 0 {
-			name := ctx.filtered[0].Fields[0]
-			if strings.EqualFold(string(ctx.query), name) {
-				// Already autocompleted to this match — no-op
-				return ""
+			topMatch := ctx.filtered[0]
+			name := topMatch.Fields[0]
+			if !strings.EqualFold(string(ctx.query), name) {
+				// First Tab: autocomplete the name
+				ctx.query = []rune(name)
+				ctx.cursor = len(ctx.query)
+				filterItems(s, cfg, searchCols)
+				updateQueryExpansion(s)
+				syncTreeCursorToTopMatch(s)
 			}
-			ctx.query = []rune(name)
-			ctx.cursor = len(ctx.query)
-			filterItems(s, cfg, searchCols)
-			updateQueryExpansion(s)
-			syncTreeCursorToTopMatch(s)
+			// If folder, push scope (same behavior as Space)
+			if topMatch.HasChildren {
+				idx := findInAll(ctx.allItems, topMatch)
+				if idx >= 0 {
+					pushScope(s, idx, cfg, searchCols)
+				}
+			}
 		}
 		return ""
 
@@ -550,13 +564,10 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 	promptBg := tcell.ColorValid + 236 // 256-color: #303030, subtle surface
 	borderStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
 
-	// Mode indicator: search (magnifying glass) vs nav (arrow), or context-specific icon
+	// Mode indicator: search (magnifying glass) vs nav (arrow) — always shown
 	var promptIcon rune
 	var promptIconStyle tcell.Style
-	if ctx.promptIcon != 0 {
-		promptIcon = ctx.promptIcon
-		promptIconStyle = tcell.StyleDefault.Foreground(tcell.ColorValid + 69).Bold(true).Background(promptBg) // blue for commands
-	} else if ctx.navMode {
+	if ctx.navMode {
 		promptIcon = '\uF0A9'  //
 		promptIconStyle = tcell.StyleDefault.Foreground(tcell.ColorDarkCyan).Background(promptBg)
 	} else {
@@ -587,8 +598,17 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 	c.SetContent(px+1, y, ' ', nil, tcell.StyleDefault.Background(promptBg))
 	tx := px + promptLen // text position after icon + space
 
-	// Scope breadcrumb — just the word greyed out with a space after it.
+	// Context breadcrumb — ':' when in a pushed context (command mode)
 	scopeLen := 0
+	if len(s.contexts) > 1 && ctx.promptIcon != 0 {
+		lockedStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray).Background(promptBg)
+		c.SetContent(tx+scopeLen, y, ctx.promptIcon, nil, lockedStyle)
+		scopeLen++
+		c.SetContent(tx+scopeLen, y, ' ', nil, tcell.StyleDefault.Background(promptBg))
+		scopeLen++
+	}
+
+	// Scope breadcrumb — just the word greyed out with a space after it.
 	if len(ctx.scope) > 1 {
 		lockedStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray).Background(promptBg)
 		for si := 1; si < len(ctx.scope); si++ {

@@ -251,7 +251,7 @@ export function createFztTerminal(container, options = {}) {
   const nerdFontFamily = options.nerdFontFamily || "'Symbols Nerd Font Mono',monospace";
   const cursorClass = options.cursorClass || "fzt-cursor";
   const containerPadding = options.containerPadding || 0;
-  const defaultCursorPos = options.defaultCursorPos || { x: 3, y: 1 };
+  const defaultCursorPos = options.defaultCursorPos !== undefined ? options.defaultCursorPos : { x: 3, y: 1 };
   const wasmUrl = options.wasmUrl || "fzt.wasm";
   const extraForwardCheck = options.shouldForwardKey || null;
 
@@ -277,8 +277,13 @@ export function createFztTerminal(container, options = {}) {
       let cx = result.cursorX;
       let cy = result.cursorY;
       if (cx < 0 || cy < 0) {
-        cx = defaultCursorPos.x;
-        cy = defaultCursorPos.y;
+        if (defaultCursorPos) {
+          cx = defaultCursorPos.x;
+          cy = defaultCursorPos.y;
+        } else {
+          cx = -1;
+          cy = -1;
+        }
       }
       renderGrid(grid, cx, cy, container, {
         cursorClass,
