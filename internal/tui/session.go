@@ -2,7 +2,7 @@ package tui
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
+	"github.com/nelsong6/fzt/internal/model"
 )
 
 // Session holds a headless TUI instance for WASM or testing use.

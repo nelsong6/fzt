@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
+	"github.com/nelsong6/fzt/internal/model"
 	"gopkg.in/yaml.v3"
 )
 

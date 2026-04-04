@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/nelsong6/fuzzy-tiered/internal/column"
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
-	"github.com/nelsong6/fuzzy-tiered/internal/scorer"
+	"github.com/nelsong6/fzt/internal/column"
+	"github.com/nelsong6/fzt/internal/model"
+	"github.com/nelsong6/fzt/internal/scorer"
 )
 
 // Config holds all TUI options derived from CLI flags.
@@ -63,6 +63,15 @@ type state struct {
 	searchActive  bool         // true when query is active
 	navMode       bool         // true = nav leads (arrows drive, name echoed to prompt)
 	queryExpanded map[int]bool // auto-expansion driven by top match (temporary)
+
+	// Command mode (:)
+	commandMode     bool          // true when command palette is active
+	commandGlobal   bool          // true = global (prompt takeover), false = contextual (bottom panel)
+	commandQuery    []rune        // separate from main query so search/nav state is preserved
+	commandCursor   int           // selected command index
+	commandFiltered []commandItem // filtered command list
+	commandRanName  string        // name of the executed command (shown in prompt)
+	commandOutput   []string      // output lines from executed command (shown in list area)
 }
 
 func initState(items []model.Item, cfg Config) (*state, []int) {
@@ -270,6 +279,48 @@ func runWithSession(screen tcell.Screen, items []model.Item, cfg Config) (string
 // The tree is the single navigation surface. Typing filters and auto-expands
 // the tree to reveal matches. Up/Down always move the tree cursor.
 func handleUnifiedKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []int) string {
+	// Command output displayed — any key exits command mode
+	if s.commandMode && len(s.commandOutput) > 0 {
+		exitCommandMode(s)
+		return ""
+	}
+
+	// Command mode active — handle command input
+	if s.commandMode {
+		return handleCommandKey(s, key, ch)
+	}
+
+	// ':' enters command mode
+	if key == tcell.KeyRune && ch == ':' {
+		hasSelection := s.treeCursor >= 0
+		hasQuery := len(s.query) > 0
+		hasMatches := len(s.filtered) > 0
+
+		if !hasQuery && !hasSelection {
+			// Empty state — global command mode (takes over prompt)
+			enterCommandMode(s, true)
+			return ""
+		}
+		if hasQuery && !hasMatches {
+			// Query with no matches — global command mode
+			enterCommandMode(s, true)
+			return ""
+		}
+		if hasSelection || (hasQuery && hasMatches) {
+			// Item highlighted — autocomplete + contextual command mode (bottom panel)
+			if hasQuery && hasMatches && len(s.filtered[0].Fields) > 0 {
+				// Lock in autocomplete
+				s.query = []rune(s.filtered[0].Fields[0])
+				s.cursor = len(s.query)
+				filterItems(s, cfg, searchCols)
+				updateQueryExpansion(s)
+				syncTreeCursorToTopMatch(s)
+			}
+			enterCommandMode(s, false)
+			return ""
+		}
+	}
+
 	// Nav mode + Ctrl+U: clean slate — exit nav, clear query, deselect
 	if s.navMode && key == tcell.KeyCtrlU {
 		s.navMode = false

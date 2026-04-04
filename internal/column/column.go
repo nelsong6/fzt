@@ -3,7 +3,7 @@ package column
 import (
 	"strings"
 
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
+	"github.com/nelsong6/fzt/internal/model"
 )
 
 // ParseLines splits raw input lines by delimiter into Items.

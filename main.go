@@ -1,6 +1,6 @@
 package main
 
-import "github.com/nelsong6/fuzzy-tiered/cmd"
+import "github.com/nelsong6/fzt/cmd"
 
 func main() {
 	cmd.Execute()

@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nelsong6/fuzzy-tiered/internal/column"
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
-	"github.com/nelsong6/fuzzy-tiered/internal/tui"
-	"github.com/nelsong6/fuzzy-tiered/internal/yamlsrc"
+	"github.com/nelsong6/fzt/internal/column"
+	"github.com/nelsong6/fzt/internal/model"
+	"github.com/nelsong6/fzt/internal/tui"
+	"github.com/nelsong6/fzt/internal/yamlsrc"
 	"github.com/spf13/cobra"
 )
 
@@ -53,6 +53,7 @@ var (
 )
 
 func init() {
+	rootCmd.Version = tui.Version
 	rootCmd.Flags().StringVar(&flagLayout, "layout", "default", "Layout: 'default' or 'reverse'")
 	rootCmd.Flags().BoolVar(&flagBorder, "border", false, "Draw border around the finder")
 	rootCmd.Flags().IntVar(&flagHeaderLines, "header-lines", 0, "Number of header lines to pin (not filtered)")

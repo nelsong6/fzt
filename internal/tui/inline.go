@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
+	"github.com/nelsong6/fzt/internal/model"
 )
 
 // RunInline renders the TUI inline in the main terminal buffer (no alternate screen).

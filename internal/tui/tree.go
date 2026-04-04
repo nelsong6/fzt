@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
+	"github.com/nelsong6/fzt/internal/model"
 )
 
 // treeRow represents a single visible row in the tree view.
@@ -502,6 +502,11 @@ func handleSearchKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []
 // drawUnified renders the prompt bar and tree. The tree is the single
 // navigation surface — no separate results section.
 func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
+	if s.commandMode && s.commandGlobal {
+		drawGlobalCommandMode(c, s, cfg, w, startY, h)
+		return
+	}
+
 	borderOffset := 0
 	y := startY
 
@@ -680,7 +685,22 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 
 	// Tree section — the single navigation surface
 	visible := treeVisibleItems(s)
-	treeSpace := h - (y - startY) - borderOffset
+	totalSpace := h - (y - startY) - borderOffset
+
+	// Reserve space for contextual command panel at the bottom
+	cmdPanelH := 0
+	if s.commandMode && !s.commandGlobal {
+		// 3 rows prompt bar + 2 rows headers + command rows
+		cmdRows := len(s.commandFiltered)
+		if cmdRows > 5 {
+			cmdRows = 5
+		}
+		cmdPanelH = 5 + cmdRows // prompt(3) + headers(2) + rows
+		if cmdPanelH > totalSpace/2 {
+			cmdPanelH = totalSpace / 2
+		}
+	}
+	treeSpace := totalSpace - cmdPanelH
 
 	// When query active, find top match in tree for highlighting
 	topMatchIdx := -1
@@ -710,6 +730,12 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 		isSelected := vi == s.treeCursor
 		isTopMatch := hasQuery && !s.navMode && row.itemIdx == topMatchIdx && !isSelected
 		drawTreeRow(c, row, isSelected, isTopMatch, s, cfg, borderOffset, y+i, w)
+	}
+
+	// Contextual command panel at the bottom
+	if s.commandMode && !s.commandGlobal && cmdPanelH > 0 {
+		panelY := y + treeSpace
+		drawContextualCommandPanel(c, s, cfg, borderOffset, panelY, w, cmdPanelH)
 	}
 
 	if cfg.Border {

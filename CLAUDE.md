@@ -4,13 +4,13 @@
 
 fzt (fuzzy tiered) is an fzf-compatible fuzzy finder with two additions: depth-aware tiered scoring and first-class column support. Written in Go. Full-screen mode uses tcell; inline mode (`--height`) renders directly with ANSI escapes.
 
-Repo: `D:\repos\fuzzy-tiered`
+Repo: `D:\repos\fzt`
 Binary: `fzt.exe` (built to repo root, on PATH via Profile 1's `profile.ps1`)
 
 ## Building
 
 ```
-go build -o fzt.exe .
+go build -ldflags="-X github.com/nelsong6/fzt/internal/tui.Version=$(git describe --tags --always --dirty)" -o fzt.exe .
 ```
 
 ## Scoring Architecture
@@ -171,3 +171,7 @@ New: `--tiered`, `--depth-penalty`, `--search-cols`, `--ansi`, `--title`, `--tit
 - **Inline cursor fix**: Fixed bug where the visible cursor sat on the title bar between renders. The old code showed the cursor at the correct position then immediately moved it to the top of the region for the next redraw (while still visible). Now tracks `cursorRow` and moves to top at the start of the next render (while hidden).
 - **`drawText` convention fix**: Changed `drawText` to use character-index-based limiting (like `drawHighlightedText`) instead of absolute screen position. All callers already passed relative widths — the function was the mismatch. Fixed names being truncated or invisible in tree rows where x-offset exceeded the old absolute limit.
 - **File icon**: Changed from `\uF016` (nf-fa-file_o, outline) to `\uF15B` (nf-fa-file, solid white page) with white foreground.
+- **Command mode** (`internal/tui/commands.go`, `internal/tui/version.go`): Typing `:` opens a command palette. Two contexts: **global** (no selection — takes over the full prompt area) and **contextual** (item selected — renders as a bottom panel below the tree). Commands: `version` (shows build version), `name` (prints selected item name), `desc` (prints selected item description). The command list is filterable by typing. Enter executes, Escape exits. After execution, output replaces the command list and "press any key" dismisses. Ghost autocomplete works in the command prompt the same as the search prompt.
+- **Build version injection**: `Version` variable in `internal/tui/version.go` defaults to `"dev"` and is overridden via `-ldflags="-X ...Version=<tag>"` in CI. The build matrix computes the next version tag before building so all artifacts (including WASM) carry the release version. The `:version` command displays it.
+- **Repo rename**: Module path changed from `github.com/nelsong6/fuzzy-tiered` to `github.com/nelsong6/fzt`. All import paths updated across the codebase.
+- **Cross-repo deploy pipeline**: CI now publishes `fzt.wasm` as a release asset alongside native binaries. After release, the workflow authenticates via OIDC to Azure Key Vault, retrieves the `romaine-life-app` GitHub App credentials, generates a short-lived installation token, and fires `repository_dispatch` to `fzt-showcase` and `my-homepage` so they automatically redeploy with the new WASM. No static PAT — credentials are ephemeral.

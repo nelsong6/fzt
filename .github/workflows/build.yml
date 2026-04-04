@@ -35,7 +35,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go build -o fzt${{ matrix.ext }} ${{ matrix.package }}
+      - name: Compute next version
+        id: version
+        run: |
+          latest=$(gh release list -R ${{ github.repository }} --limit 1 --json tagName -q '.[0].tagName // empty' 2>/dev/null || echo "")
+          if [ -z "$latest" ]; then
+            echo "version=v0.1.0" >> $GITHUB_OUTPUT
+          else
+            patch=$(echo "$latest" | sed 's/v[0-9]*\.[0-9]*\.//')
+            echo "version=v0.1.$((patch + 1))" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: go build -ldflags="-X github.com/nelsong6/fzt/internal/tui.Version=${{ steps.version.outputs.version }}" -o fzt${{ matrix.ext }} ${{ matrix.package }}
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -104,13 +116,13 @@ jobs:
         with:
           app-id: ${{ steps.app-creds.outputs.app_id }}
           private-key: ${{ steps.app-creds.outputs.private_key }}
-          repositories: fuzzy-tiers-showcase,my-homepage
+          repositories: fzt-showcase,my-homepage
 
       - name: Notify downstream repos
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          for repo in nelsong6/fuzzy-tiers-showcase nelsong6/my-homepage; do
+          for repo in nelsong6/fzt-showcase nelsong6/my-homepage; do
             gh api repos/$repo/dispatches \
               -f event_type=fzt-updated
           done

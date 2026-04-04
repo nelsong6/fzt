@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
+	"github.com/nelsong6/fzt/internal/model"
 )
 
 // ansiPattern matches ANSI CSI sequences like \x1b[38;5;229m or \x1b[0m.

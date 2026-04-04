@@ -7,9 +7,9 @@ import (
 	"syscall/js"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/nelsong6/fuzzy-tiered/internal/model"
-	"github.com/nelsong6/fuzzy-tiered/internal/tui"
-	"github.com/nelsong6/fuzzy-tiered/internal/yamlsrc"
+	"github.com/nelsong6/fzt/internal/model"
+	"github.com/nelsong6/fzt/internal/tui"
+	"github.com/nelsong6/fzt/internal/yamlsrc"
 )
 
 var (
