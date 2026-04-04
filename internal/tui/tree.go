@@ -254,13 +254,14 @@ func handleTreeKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []in
 		return "", false
 
 	case tcell.KeyEscape:
-		// If we're in a pushed context, pop it instead of cancelling
-		if len(s.contexts) > 1 {
-			popContext(s)
-			return "", false
-		}
-		s.cancelled = true
-		return "cancel", false
+		// Exit nav mode, clear query, deselect — return to empty search state
+		ctx.navMode = false
+		ctx.searchActive = false
+		ctx.query = nil
+		ctx.cursor = 0
+		ctx.treeCursor = -1
+		ctx.queryExpanded = make(map[int]bool)
+		return "", false
 
 	case tcell.KeyRune:
 		return "", true
