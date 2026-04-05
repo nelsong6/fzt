@@ -205,8 +205,7 @@ func handleTreeKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []in
 		if ctx.treeCursor >= 0 && ctx.treeCursor < visLen {
 			row := visible[ctx.treeCursor]
 			if row.item.HasChildren {
-				// Toggle expand/collapse in place
-				ctx.treeExpanded[row.itemIdx] = !ctx.treeExpanded[row.itemIdx]
+				pushScope(s, row.itemIdx, cfg, searchCols)
 				return "", false
 			}
 			if ctx.onLeafSelect != nil {
@@ -254,7 +253,11 @@ func handleTreeKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []in
 		return "", false
 
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
-		// Pop context if stacked (e.g. command mode) and no query active
+		// Pop scope first, then context
+		if len(ctx.scope) > 1 {
+			popScope(s, cfg, searchCols)
+			return "", false
+		}
 		if len(s.contexts) > 1 {
 			popContext(s)
 			return "", false
@@ -262,7 +265,11 @@ func handleTreeKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []in
 		return "", false
 
 	case tcell.KeyEscape:
-		// Pop context if stacked (e.g. command mode)
+		// Pop scope first, then context
+		if len(ctx.scope) > 1 {
+			popScope(s, cfg, searchCols)
+			return "", false
+		}
 		if len(s.contexts) > 1 {
 			popContext(s)
 			return "", false
@@ -381,7 +388,7 @@ func handleSearchKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []
 		if ctx.treeCursor >= 0 && ctx.treeCursor < len(visible) {
 			row := visible[ctx.treeCursor]
 			if row.item.HasChildren {
-				ctx.treeExpanded[row.itemIdx] = !ctx.treeExpanded[row.itemIdx]
+				pushScope(s, row.itemIdx, cfg, searchCols)
 				return ""
 			}
 			if ctx.onLeafSelect != nil {
@@ -395,7 +402,7 @@ func handleSearchKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []
 			if selected.HasChildren {
 				idx := findInAll(ctx.allItems, selected)
 				if idx >= 0 {
-					ctx.treeExpanded[idx] = !ctx.treeExpanded[idx]
+					pushScope(s, idx, cfg, searchCols)
 				}
 				return ""
 			}

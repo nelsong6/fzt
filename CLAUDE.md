@@ -68,33 +68,34 @@ Two modes that switch automatically based on user action:
 - **Search mode** ( icon, yellow): typing drives navigation. The tree auto-expands to reveal the top match, and the cursor follows it. Ghost autocomplete text shows the remaining characters of the top match name when the query is a prefix.
 - **Nav mode** ( icon, cyan): arrow keys drive. The selected item's name echoes in the prompt (italic gray, like autocomplete — speculative, not committed). Ancestor breadcrumbs show the path to the current item.
 
-Switching: typing any character → search mode. Pressing Up/Down/Left/Right → nav mode. The transition is automatic.
+Switching: typing any character → search mode. Pressing Up/Down/Left/Right or Shift+HJKL → nav mode. `/` in nav mode activates search mode without inserting the character. The transition is automatic.
 
 ### Key bindings
 
 - **Typing**: appends to query (always at end — no mid-query cursor), filters tree, auto-expands to top match
-- **Up/Down**: move tree cursor (switches to nav mode)
-- **Left**: collapse folder or move to parent. At root in nav mode → exits nav mode back to search
-- **Right**: expand folder or move to first child
-- **Tab**: autocomplete query to top match name. If already a perfect match, no-op (TODO: undecided behavior for repeated Tab after perfect match)
+- **Up/Down** (or **Shift+K/J**): move tree cursor (switches to nav mode)
+- **Left** (or **Shift+H**): collapse folder or move to parent. At root in nav mode → exits nav mode back to search
+- **Right** (or **Shift+L**): expand folder or move to first child
+- **Tab**: autocomplete query to top match name. If the match is a folder, pushes scope into it
 - **Space**: on a folder → pushScope (enter folder). On a leaf → inserts space in query
-- **Enter**: on a folder → toggle expand/collapse. On a leaf → select (return output)
-- **Backspace**: in search mode → delete last query char. In nav mode → takes displayed item name, removes last char, switches to search mode. On empty query in scope → popScope
+- **Enter**: on a folder → pushScope (enter folder). On a leaf → select (return output)
+- **`/`**: in nav mode → activates search mode without inserting the character (vim-style)
+- **Backspace**: in search mode → delete last query char. In nav mode → pop scope (then pop context). On empty query in scope → popScope
 - **Ctrl+W**: delete last word from query
 - **Ctrl+U**: clean slate — exit nav mode, clear query, deselect, collapse auto-expansions
-- **Escape**: clear query → deactivate search → pop scope → cancel (progressive)
+- **Escape**: clear query → pop scope → pop context → deactivate search → cancel (progressive)
 - **Ctrl+C**: hard cancel
 
 ### Scope
 
-Space on a folder pushes a scope level. The folder name appears as a locked breadcrumb (dark gray, non-italic) in the prompt. Backspace on empty query pops the scope and collapses the folder (if it wasn't expanded before entering). Scope state is saved/restored across push/pop (query, cursor position, tree offset).
+Space, Enter, or Tab on a folder pushes a scope level. The folder name appears as a locked breadcrumb (dark gray, non-italic) in the prompt. Backspace on empty query pops the scope and collapses the folder (if it wasn't expanded before entering). Escape also pops scope progressively. Scope state is saved/restored across push/pop (query, cursor position, tree offset).
 
 ### Prompt bar anatomy
 
 `[mode icon] [scope breadcrumbs] [context breadcrumbs] [query + ghost | nav preview]`
 
 - **Mode icon**: search () or nav () — switches automatically
-- **Scope breadcrumbs**: locked folders entered via Space (dark gray, non-italic)
+- **Scope breadcrumbs**: locked folders entered via Space/Enter/Tab (dark gray, non-italic)
 - **Context breadcrumbs**: ancestor path of the focused item (dark gray, italic) — transient, updates as the match/cursor changes. Stops at the scope boundary
 - **Query + ghost**: typed text in white, ghost autocomplete in dark gray
 - **Nav preview**: selected item name in italic dark gray (only in nav mode)
@@ -153,6 +154,17 @@ New: `--tiered`, `--depth-penalty`, `--search-cols`, `--ansi`, `--title`, `--tit
 - **Key parser** (`internal/tui/keyparse.go`): `parseKey()` translates raw terminal bytes into `(tcell.Key, rune)` pairs compatible with `handleKeyEvent()`. Handles single-byte control chars, CSI sequences (arrows, delete, backtab), SS3 sequences, and UTF-8 multi-byte runes. Skips unrecognized CSI sequences gracefully.
 - **Tree navigation stays in tree** (`internal/tui/tree.go`): `handleTreeKey` no longer calls `pushScope` on Enter/Right. Enter toggles folder expand/collapse, Right expands (or moves to first child if already expanded), Left collapses (or moves to parent). Escape cancels the picker. Motivation: entering a folder previously activated search mode via `pushScope` which set `searchActive = true`, routing keys to `handlePromptKey` where Up/Down arrows were ignored — arrow navigation was lost after opening any folder.
 - **Test bookmarks updated** (`test-bookmarks.yaml`): Replaced synthetic test data with real bookmark hierarchy matching the live my-homepage deployment (Nelsonhub, Home, Bills, Dev, google, romaine.life).
+
+### 2026-04-05
+
+- **Shift+HJKL vim navigation**: Capital H/J/K/L (Shift held) act as Left/Down/Up/Right anywhere — search mode or nav mode. Since scoring is case-insensitive, capitals are free for navigation without conflicting with search input. Intercepted early in `handleUnifiedKey` before the character reaches query insertion.
+- **`/` activates search from nav mode**: Pressing `/` in nav mode switches to search mode with an empty query, without inserting the `/` character. Mirrors the vim/Google search shortcut. Added as a special case in the `KeyRune` dispatch before normal character handling.
+- **Enter on folder pushes scope**: Enter on a folder now always calls `pushScope` instead of toggling expand/collapse, in both nav mode and search mode. Entering a folder and pushing scope are now synonymous. Visual expand/collapse is handled exclusively by Left/Right (and Shift+H/L). Simplifies the mental model — Enter = "go into", arrows = "look around".
+- **Nav mode Escape/Backspace pop scope**: `handleTreeKey`'s Escape and Backspace handlers now check for stacked scopes before checking for stacked contexts. Previously they only knew about contexts (command mode), so scopes pushed via Enter would get stuck in the breadcrumb.
+- **Tab autocompletes into folder scope**: Tab now autocompletes the query to the top match name and, if the match is a folder, pushes scope into it (same as typing the name + Space). Previously Tab just autocompleted without entering the folder.
+- **Tree edit clipboard commands** (`commands.go`): Added "tree edit" folder to the `:` command palette with two leaf commands: "copy yaml" (returns `copy-yaml` action) and "paste yaml" (returns `paste-yaml` action). The Go side just emits action strings — clipboard and API handling is done by the JS consumer.
+- **Backspace pops context in nav mode**: `handleTreeKey` now handles Backspace — pops scope first, then context. Previously Backspace was only handled in `handleSearchKey`, so pressing Backspace in nav mode with no query did nothing.
+- **Default branch renamed to main**: Renamed from `master` to `main`. Build workflow updated to trigger on `main`. Azure OIDC federated identity updated in infra-bootstrap.
 
 ### 2026-04-04
 
