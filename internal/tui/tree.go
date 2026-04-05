@@ -220,15 +220,7 @@ func handleTreeKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []in
 		if ctx.treeCursor >= 0 && ctx.treeCursor < visLen {
 			row := visible[ctx.treeCursor]
 			if row.item.HasChildren {
-				if !ctx.treeExpanded[row.itemIdx] {
-					// Expand collapsed folder
-					ctx.treeExpanded[row.itemIdx] = true
-				} else {
-					// Already expanded — move to first child
-					if ctx.treeCursor+1 < visLen {
-						ctx.treeCursor++
-					}
-				}
+				pushScope(s, row.itemIdx, cfg, searchCols)
 			}
 		}
 		return "", false
@@ -557,6 +549,8 @@ func handleSearchKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols []
 
 // drawUnified renders the prompt bar and tree. The tree is the single
 // navigation surface — no separate results section.
+// Within this function, ctx.navMode affects ONLY the prompt icon.
+// All other rendering is mode-independent.
 func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 	ctx := s.topCtx()
 
@@ -574,6 +568,7 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 	}
 
 	hasQuery := len(ctx.query) > 0
+	visible := treeVisibleItems(s)
 
 	// Prompt bar — bordered input field, the primary UI element
 	promptBg := tcell.ColorValid + 236 // 256-color: #303030, subtle surface
@@ -642,22 +637,17 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 
 	// Context breadcrumb — italic path showing where the focused item lives.
 	matchCtxLen := 0
-	ctxItemIdx := -1
-	if ctx.navMode {
-		visible := treeVisibleItems(s)
-		if ctx.treeCursor >= 0 && ctx.treeCursor < len(visible) {
-			ctxItemIdx = visible[ctx.treeCursor].itemIdx
-		}
-	} else if hasQuery && len(ctx.filtered) > 0 {
-		ctxItemIdx = findInAll(ctx.allItems, ctx.filtered[0])
+	focusedItemIdx := -1
+	if ctx.treeCursor >= 0 && ctx.treeCursor < len(visible) {
+		focusedItemIdx = visible[ctx.treeCursor].itemIdx
 	}
-	if ctxItemIdx >= 0 {
+	if focusedItemIdx >= 0 {
 		scopeParent := -1
 		if len(ctx.scope) > 1 {
 			scopeParent = ctx.scope[len(ctx.scope)-1].parentIdx
 		}
 		var ancestors []string
-		idx := ctx.allItems[ctxItemIdx].ParentIdx
+		idx := ctx.allItems[focusedItemIdx].ParentIdx
 		for idx >= 0 && idx < len(ctx.allItems) && idx != scopeParent {
 			if len(ctx.allItems[idx].Fields) > 0 {
 				ancestors = append([]string{ctx.allItems[idx].Fields[0]}, ancestors...)
@@ -679,16 +669,7 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 	contentX := qx + matchCtxLen // where query or nav preview starts
 	contentW := pw - promptLen - scopeLen - matchCtxLen
 
-	if ctx.navMode {
-		// Nav mode: echo selected item's name in the prompt
-		visible := treeVisibleItems(s)
-		if ctx.treeCursor >= 0 && ctx.treeCursor < len(visible) && len(visible[ctx.treeCursor].item.Fields) > 0 {
-			name := visible[ctx.treeCursor].item.Fields[0]
-			nameStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray).Italic(true).Background(promptBg)
-			drawText(c, contentX, y, name, nameStyle, contentW)
-		}
-		c.HideCursor()
-	} else if hasQuery {
+	if hasQuery {
 		queryStyle := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(promptBg)
 		drawText(c, contentX, y, string(ctx.query), queryStyle, contentW)
 		c.ShowCursor(contentX+ctx.cursor, y)
@@ -747,7 +728,6 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 	}
 
 	// Tree section — the single navigation surface
-	visible := treeVisibleItems(s)
 	totalSpace := h - (y - startY) - borderOffset
 	treeSpace := totalSpace
 
@@ -777,7 +757,7 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 		}
 		row := visible[vi]
 		isSelected := vi == ctx.treeCursor
-		isTopMatch := hasQuery && !ctx.navMode && row.itemIdx == topMatchIdx && !isSelected
+		isTopMatch := hasQuery && row.itemIdx == topMatchIdx && !isSelected
 		drawTreeRow(c, row, isSelected, isTopMatch, ctx, cfg, borderOffset, y+i, w)
 	}
 

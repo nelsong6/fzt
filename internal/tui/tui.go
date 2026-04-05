@@ -394,6 +394,17 @@ func handleUnifiedKey(s *state, key tcell.Key, ch rune, cfg Config, searchCols [
 				ctx.navMode = false
 				return ""
 			}
+			// Space on a folder → push scope (same as Enter)
+			if ch == ' ' {
+				visible := treeVisibleItems(s)
+				if ctx.treeCursor >= 0 && ctx.treeCursor < len(visible) {
+					row := visible[ctx.treeCursor]
+					if row.item.HasChildren {
+						pushScope(s, row.itemIdx, cfg, searchCols)
+						return ""
+					}
+				}
+			}
 			// Printable character → activate search
 			ctx.searchActive = true
 			ctx.navMode = false
