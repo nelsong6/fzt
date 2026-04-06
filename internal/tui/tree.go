@@ -562,7 +562,7 @@ func drawUnified(c Canvas, s *state, cfg Config, w, startY, h int) {
 		if s.showVersion {
 			versionStr = Version
 		}
-		drawBorderTopWithTitle(c, w, y, cfg.Title, cfg.TitlePos, versionStr)
+		drawBorderTopWithTitle(c, w, y, cfg.Title, cfg.TitlePos, versionStr, cfg.Label)
 		y++
 		borderOffset = 1
 	}

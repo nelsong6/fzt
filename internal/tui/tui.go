@@ -30,6 +30,7 @@ type Config struct {
 	Title        string // title displayed at the top of the finder
 	TitlePos     string // title position: "left", "center", "right"
 	TreeMode     bool   // start in tree view mode
+	Label        string // optional label rendered on top-left border
 }
 
 type scopeLevel struct {
@@ -963,7 +964,7 @@ func drawReverse(c Canvas, s *state, cfg Config, w, startY, h int) {
 		if s.showVersion {
 			versionStr = Version
 		}
-		drawBorderTopWithTitle(c, w, y, cfg.Title, cfg.TitlePos, versionStr)
+		drawBorderTopWithTitle(c, w, y, cfg.Title, cfg.TitlePos, versionStr, cfg.Label)
 		y++
 		borderOffset = 1
 	}
@@ -1078,7 +1079,7 @@ func drawDefault(c Canvas, s *state, cfg Config, w, startY, h int) {
 		if s.showVersion {
 			versionStr = Version
 		}
-		drawBorderTopWithTitle(c, w, y, cfg.Title, cfg.TitlePos, versionStr)
+		drawBorderTopWithTitle(c, w, y, cfg.Title, cfg.TitlePos, versionStr, cfg.Label)
 		y++
 		borderOffset = 1
 	}
@@ -1290,7 +1291,7 @@ func drawBorderTop(c Canvas, w, y int) {
 	drawBorderTopWithTitle(c, w, y, "", "", "")
 }
 
-func drawBorderTopWithTitle(c Canvas, w, y int, title, pos string, version string) {
+func drawBorderTopWithTitle(c Canvas, w, y int, title, pos string, version string, label ...string) {
 	borderStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
 	c.SetContent(0, y, '┌', nil, borderStyle)
 	for x := 1; x < w-1; x++ {
@@ -1339,6 +1340,22 @@ func drawBorderTopWithTitle(c Canvas, w, y int, title, pos string, version strin
 			}
 			c.SetContent(vStart+1+len(vRunes), y, ' ', nil, borderStyle)
 		}
+	}
+
+	// Label pinned to top-left of border
+	if len(label) > 0 && label[0] != "" {
+		lRunes := []rune(label[0])
+		lStart := 2 // 1 corner + 1 ─
+		maxLen := w - 6
+		if len(lRunes) > maxLen {
+			lRunes = lRunes[:maxLen]
+		}
+		lStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
+		c.SetContent(lStart, y, ' ', nil, borderStyle)
+		for i, r := range lRunes {
+			c.SetContent(lStart+1+i, y, r, nil, lStyle)
+		}
+		c.SetContent(lStart+1+len(lRunes), y, ' ', nil, borderStyle)
 	}
 }
 

@@ -99,6 +99,11 @@ func (sess *Session) ClickRow(row int) (SessionFrame, string) {
 	return frame, action
 }
 
+// SetLabel sets the border label displayed on the top-left of the border.
+func (sess *Session) SetLabel(label string) {
+	sess.cfg.Label = label
+}
+
 // SelectedURL returns the URL of the currently selected item, if any.
 func (sess *Session) SelectedURL() string {
 	s := sess.state

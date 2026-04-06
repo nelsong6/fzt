@@ -24,9 +24,30 @@ func main() {
 		"clickRow":  js.FuncOf(clickRow),
 		"resize":    js.FuncOf(resize),
 		"loadYAML":  js.FuncOf(loadYAML),
+		"setLabel":  js.FuncOf(setLabel),
 	}))
 	select {}
 }
+
+// setLabel sets a label string displayed on the top-left border.
+// Args: label (string)
+// Returns: SessionFrame if session exists, null otherwise
+func setLabel(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return jsError("setLabel requires a label string")
+	}
+	label := args[0].String()
+	if session != nil {
+		session.SetLabel(label)
+		frame := session.Render()
+		return frameToJS(frame)
+	}
+	// Store for later — will be applied when session is created
+	pendingLabel = label
+	return js.Null()
+}
+
+var pendingLabel string
 
 // loadYAML parses YAML and stores items, but does not create a session.
 func loadYAML(this js.Value, args []js.Value) interface{} {
@@ -67,6 +88,10 @@ func initSession(this js.Value, args []js.Value) interface{} {
 	}
 
 	session = tui.NewTreeSession(items, cfg, cols, rows)
+	if pendingLabel != "" {
+		session.SetLabel(pendingLabel)
+		pendingLabel = ""
+	}
 	frame := session.Render()
 	return frameToJS(frame)
 }
