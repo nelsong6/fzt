@@ -1418,9 +1418,9 @@ func runSelfUpdate() {
 	}
 	dest := filepath.Dir(self)
 
-	fmt.Printf("Downloading latest %s...\n", asset)
+	fmt.Fprintf(os.Stderr, "Downloading latest %s...\n", asset)
 	cmd := exec.Command("gh", "release", "download", "--repo", "nelsong6/fzt", "--pattern", asset, "--dir", dest, "--clobber")
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
@@ -1437,7 +1437,7 @@ func runSelfUpdate() {
 		os.Rename(downloaded, final)
 	}
 
-	fmt.Printf("Updated: %s\n", final)
+	fmt.Fprintf(os.Stderr, "Updated: %s\n", final)
 }
 
 // RunFilter runs in non-interactive mode (like fzf --filter).
