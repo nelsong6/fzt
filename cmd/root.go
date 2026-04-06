@@ -50,6 +50,7 @@ var (
 	flagTitle        string
 	flagTitlePos     string
 	flagTree         bool
+	flagUpdate       bool
 )
 
 func init() {
@@ -79,6 +80,7 @@ func init() {
 	rootCmd.Flags().StringVar(&flagTitle, "title", "", "Title string displayed at the top of the finder")
 	rootCmd.Flags().StringVar(&flagTitlePos, "title-pos", "left", "Title position: 'left', 'center', or 'right'")
 	rootCmd.Flags().BoolVar(&flagTree, "tree", false, "Start in tree view mode (expand/collapse navigation)")
+	rootCmd.Flags().BoolVar(&flagUpdate, "update", false, "Update fzt to the latest release")
 }
 
 func Execute() {
@@ -93,6 +95,11 @@ func Execute() {
 }
 
 func run(cmd *cobra.Command, args []string) error {
+	if flagUpdate {
+		tui.RunUpdate()
+		return nil
+	}
+
 	var items []model.Item
 
 	if flagYAML != "" {

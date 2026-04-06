@@ -306,7 +306,7 @@ func runWithSession(screen tcell.Screen, items []model.Item, cfg Config) (string
 				return "", nil
 			case action == "update":
 				screen.Fini()
-				runSelfUpdate()
+				RunUpdate()
 				os.Exit(0)
 			case len(action) > 7 && action[:7] == "select:":
 				return action[7:], nil
@@ -1402,8 +1402,8 @@ func formatOutput(item model.Item, cfg Config) string {
 	return strings.Join(item.Fields, "\t")
 }
 
-// runSelfUpdate downloads the latest fzt release from GitHub if a newer version exists.
-func runSelfUpdate() {
+// RunUpdate downloads the latest fzt release from GitHub if a newer version exists.
+func RunUpdate() {
 	current := Version
 	fmt.Fprintf(os.Stderr, "Current: %s\n", current)
 
