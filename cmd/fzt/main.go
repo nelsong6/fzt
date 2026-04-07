@@ -10,9 +10,14 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: fzt <query>")
-		os.Exit(1)
+	if len(os.Args) < 2 || os.Args[1] == "--help" || os.Args[1] == "-h" {
+		fmt.Fprintln(os.Stderr, "fzt — fuzzy tiered scorer")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Usage: <input> | fzt <query>")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Reads lines from stdin, scores each against <query> using")
+		fmt.Fprintln(os.Stderr, "tiered fuzzy matching, and prints matches ranked best-first.")
+		os.Exit(0)
 	}
 	query := os.Args[1]
 
