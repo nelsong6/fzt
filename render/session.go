@@ -267,10 +267,7 @@ func (sess *Session) GetUIState() UIState {
 
 	title := sess.cfg.Title
 
-	version := ""
-	if sess.state.ShowVersion {
-		version = Version
-	}
+	version := sess.state.VersionDisplay
 
 	return UIState{
 		Title:        title,
