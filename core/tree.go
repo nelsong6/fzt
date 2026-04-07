@@ -61,12 +61,20 @@ type TreeContext struct {
 	PromptIcon   rune // 0 = default (search/nav), ':' for commands
 }
 
+// CommandItem describes a frontend-registered command for the `:` palette.
+type CommandItem struct {
+	Name        string // display name (e.g. "edit", "copy yaml")
+	Description string // short description shown beside the name
+	Action      string // action string returned on selection (e.g. "edit", "copy-yaml")
+}
+
 // State holds the context stack and global flags.
 type State struct {
-	Contexts    []TreeContext
-	Cancelled   bool
-	ShowVersion bool
-	Provider    TreeProvider // optional: loads children on demand for lazy tree modes
+	Contexts         []TreeContext
+	Cancelled        bool
+	ShowVersion      bool
+	Provider         TreeProvider  // optional: loads children on demand for lazy tree modes
+	FrontendCommands []CommandItem // registered by the frontend; shown at top level of `:` palette
 }
 
 // TopCtx returns a pointer to the top of the context stack.

@@ -397,6 +397,11 @@ export function createFztTerminal(container, options = {}) {
       return true;
     },
 
+    addCommands(commands) {
+      if (!ready) return;
+      fzt.addCommands(commands);
+    },
+
     initSession() {
       if (!ready) return;
       const { cols, rows } = computeGridSize();

@@ -74,13 +74,16 @@ Release assets shipped alongside native binaries and `fzt.wasm`:
 
 Both fzt-showcase and my-homepage download these at deploy time via `gh release download` and are auto-redeployed on new fzt releases via `repository_dispatch`.
 
-### Future: Extensible command menu
+### Command palette (`:`)
 
-The `:` command palette currently has hardcoded commands (version, tree edit, update). A planned enhancement would let consumers register app-specific commands at init time (e.g., "edit", "sync" for my-homepage) via a `commands` option or `fzt.addCommands()` WASM API. These would appear alongside the built-in commands and return action strings to JS. This would replace the need for app-specific toolbar buttons.
+The `:` palette is a hidden root-level folder — not a special mode. Typing `:` scopes into it like any other folder. Two levels:
 
-### Design boundary: command palette vs external menus
+- **Root**: frontend-registered commands (via `State.FrontendCommands` / `fzt.addCommands()`). Each frontend registers its own — homepage has edit, logout, copy yaml, paste yaml. Core doesn't know what they do, just returns action strings.
+- **`:` subfolder**: core fzt commands (version, update). Reached by typing `::` (scope into `:`, then into the inner `:`).
 
-The `:` command palette is for **fzt meta/self-management features** — things that manage fzt itself (update, version toggle, settings). These are available on every fzt instance without opt-in. When adding fzt management features, add them here (`internal/tui/commands.go`), not to shell-config at-menu YAML or per-profile shell functions. For CLI, commands can shell out (e.g., `gh release download`). For WASM, unsupported commands should be hidden or no-op gracefully.
+If no frontend commands are registered (e.g. CLI), core commands are promoted to root — no empty nesting.
+
+When adding core fzt management features, add them to `internal/tui/commands.go` `buildCoreItems()`. When adding app-specific features, register them via `addCommands()` in the frontend.
 
 ## Tree Mode
 
@@ -230,3 +233,6 @@ New: `--tiered`, `--depth-penalty`, `--search-cols`, `--ansi`, `--title`, `--tit
 - **Tree state extraction** — Moved state types (`State`, `TreeContext`, `ScopeLevel`, `ContextKind`, `TreeRow`) and pure logic functions (`NewState`, `FilterItems`, `PushScope`, `PopScope`, `TreeVisibleItems`, `UpdateQueryExpansion`, `SyncTreeCursorToTopMatch`, `BuildScopePath`, `FindInAll`, `RootItemsOf`, `DescendantsOf`, `ChildrenOf`, `GetAncestorNames`) from `internal/tui/` to `core/`. The tui package now imports `core/` for all state operations and only owns rendering and key handling. `tui.Config` is a type alias for `core.Config` to avoid breaking cmd imports.
 - **`TreeProvider` interface** — New `core.TreeProvider` interface with `LoadChildren(parentPath string) []Item`. When `State.Provider` is set and `PushScope` encounters a folder with no loaded children, it calls the provider to dynamically splice new items into the tree. Enables lazy-loading frontends like fzt-picker.
 - **`DirProvider`** — Built-in `core.DirProvider` implementation that reads filesystem directories. Excludes `.git`, `node_modules`, `$Recycle.Bin`, `System Volume Information`. Sorts directories first, then files, alphabetically. Created via `core.NewDirProvider()`.
+- **Namespaced command palette** — `:` palette restructured as a hidden root folder with two levels. Frontend-registered commands appear at root level, core commands (version, update) nested inside a `:` subfolder. Typing `:` scopes into the palette; `::` reaches core commands. When no frontend commands are registered (e.g. CLI), core commands are promoted to root. New `core.CommandItem` type and `State.FrontendCommands` field. Each frontend registers its own commands — core doesn't know what they do, just returns action strings.
+- **`fzt.addCommands()` WASM API** — New JS API to register frontend-specific commands before `fzt.init()`. Accepts an array of `{name, description, action}` objects. Stored as `pendingCommands`, applied to the session state on init. `fzt-terminal.js` exposes `addCommands()` pass-through.
+- **Homepage commands decoupled** — "tree edit", "copy yaml", "paste yaml" removed from hardcoded `commands.go`. Homepage's `fzh-terminal.js` now registers edit, logout, copy yaml, paste yaml via `addCommands()` after WASM init. The Go side only knows about core commands (version, update).

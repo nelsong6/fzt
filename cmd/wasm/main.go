@@ -12,18 +12,20 @@ import (
 )
 
 var (
-	currentItems []core.Item
-	session      *tui.Session
+	currentItems     []core.Item
+	session          *tui.Session
+	pendingCommands  []core.CommandItem
 )
 
 func main() {
 	js.Global().Set("fzt", js.ValueOf(map[string]interface{}{
-		"init":      js.FuncOf(initSession),
-		"handleKey": js.FuncOf(handleKey),
-		"clickRow":  js.FuncOf(clickRow),
-		"resize":    js.FuncOf(resize),
-		"loadYAML":  js.FuncOf(loadYAML),
-		"setLabel":  js.FuncOf(setLabel),
+		"init":        js.FuncOf(initSession),
+		"handleKey":   js.FuncOf(handleKey),
+		"clickRow":    js.FuncOf(clickRow),
+		"resize":      js.FuncOf(resize),
+		"loadYAML":    js.FuncOf(loadYAML),
+		"setLabel":    js.FuncOf(setLabel),
+		"addCommands": js.FuncOf(addCommands),
 	}))
 	select {}
 }
@@ -47,6 +49,27 @@ func setLabel(this js.Value, args []js.Value) interface{} {
 }
 
 var pendingLabel string
+
+// addCommands registers frontend-specific commands for the `:` palette.
+// Args: commands (array of {name: string, description: string, action: string})
+// Must be called before init().
+func addCommands(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return jsError("addCommands requires an array of command objects")
+	}
+	arr := args[0]
+	length := arr.Length()
+	pendingCommands = make([]core.CommandItem, 0, length)
+	for i := 0; i < length; i++ {
+		obj := arr.Index(i)
+		pendingCommands = append(pendingCommands, core.CommandItem{
+			Name:        obj.Get("name").String(),
+			Description: obj.Get("description").String(),
+			Action:      obj.Get("action").String(),
+		})
+	}
+	return js.Null()
+}
 
 // loadYAML parses YAML and stores items, but does not create a session.
 func loadYAML(this js.Value, args []js.Value) interface{} {
@@ -87,6 +110,9 @@ func initSession(this js.Value, args []js.Value) interface{} {
 	}
 
 	session = tui.NewTreeSession(items, cfg, cols, rows)
+	if len(pendingCommands) > 0 {
+		session.SetFrontendCommands(pendingCommands)
+	}
 	if pendingLabel != "" {
 		session.SetLabel(pendingLabel)
 		pendingLabel = ""

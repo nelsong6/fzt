@@ -104,6 +104,11 @@ func (sess *Session) SetLabel(label string) {
 	sess.cfg.Label = label
 }
 
+// SetFrontendCommands registers frontend-specific commands for the `:` palette.
+func (sess *Session) SetFrontendCommands(commands []core.CommandItem) {
+	sess.state.FrontendCommands = commands
+}
+
 // SelectedURL returns the URL of the currently selected item, if any.
 func (sess *Session) SelectedURL() string {
 	s := sess.state
