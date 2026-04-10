@@ -6,6 +6,20 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+// syncQueryToCursor updates the search query to match the name of the item
+// under the tree cursor. Called when navigating away from a search result
+// so the search bar follows the highlighted row.
+func syncQueryToCursor(ctx *TreeContext, visible []TreeRow) {
+	if ctx.TreeCursor >= 0 && ctx.TreeCursor < len(visible) {
+		row := visible[ctx.TreeCursor]
+		if len(row.Item.Fields) > 0 {
+			ctx.Query = []rune(row.Item.Fields[0])
+			ctx.Cursor = len(ctx.Query)
+			ctx.Filtered = nil // clear stale top match highlight
+		}
+	}
+}
+
 // HandleUnifiedKey handles all key events in unified tree+search mode.
 // The tree is the single navigation surface. Typing filters and auto-expands
 // the tree to reveal matches. Up/Down always move the tree cursor.
@@ -389,6 +403,14 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 		if ctx.TreeCursor >= 0 && ctx.TreeCursor < visLen {
 			row := visible[ctx.TreeCursor]
 			if row.Item.HasChildren {
+				curScope := ctx.Scope[len(ctx.Scope)-1]
+				if curScope.ParentIdx == row.ItemIdx {
+					// Already scoped into this folder — trigger folder-link or no-op
+					if row.Item.URL != "" {
+						return "select:" + FormatOutput(row.Item, cfg), false
+					}
+					return "", false
+				}
 				PushScope(s, row.ItemIdx, cfg, searchCols)
 				return "", false
 			}
@@ -504,6 +526,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 			} else {
 				ctx.TreeCursor--
 			}
+			syncQueryToCursor(ctx, visible)
 		}
 		return ""
 
@@ -519,6 +542,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 					ctx.TreeCursor = 0
 				}
 			}
+			syncQueryToCursor(ctx, visible)
 		}
 		return ""
 
@@ -552,6 +576,14 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 		if ctx.TreeCursor >= 0 && ctx.TreeCursor < len(visible) {
 			row := visible[ctx.TreeCursor]
 			if row.Item.HasChildren {
+				curScope := ctx.Scope[len(ctx.Scope)-1]
+				if curScope.ParentIdx == row.ItemIdx {
+					// Already scoped into this folder — trigger folder-link or no-op
+					if row.Item.URL != "" {
+						return "select:" + FormatOutput(row.Item, cfg)
+					}
+					return ""
+				}
 				PushScope(s, row.ItemIdx, cfg, searchCols)
 				return ""
 			}
@@ -563,6 +595,13 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 			if selected.HasChildren {
 				idx := FindInAll(ctx.AllItems, selected)
 				if idx >= 0 {
+					curScope := ctx.Scope[len(ctx.Scope)-1]
+					if curScope.ParentIdx == idx {
+						if selected.URL != "" {
+							return "select:" + FormatOutput(selected, cfg)
+						}
+						return ""
+					}
 					PushScope(s, idx, cfg, searchCols)
 				}
 				return ""

@@ -6,7 +6,7 @@ fzt (fuzzy tiered) is a pure scoring and state engine: depth-aware tiered scorin
 
 ### Package structure
 
-- **`core/`** -- Public library. Data types (`Item`, `TieredScore`, `StyledRune`), fuzzy scoring (`FuzzyMatch`, `ScoreItem`), column parsing (`ParseLines`, `ComputeWidths`, `FormatRow`), YAML loading (`LoadYAML`, `LoadYAMLFromString`), ANSI parsing (`ParseANSI`, `StripANSI`), tree state management (`State`, `TreeContext`, `PushScope`, `PopScope`, `FilterItems`, `TreeVisibleItems`, `UpdateQueryExpansion`, `SyncTreeCursorToTopMatch`, `BuildScopePath`, `ExpandToPath`), key handlers (`HandleUnifiedKey`, `HandleKeyEvent`, `HandleTreeKey`, `HandleSearchKey`, `ClickUnifiedRow`), the `TreeProvider` interface for pluggable data sources, `DirProvider` for filesystem trees, `ListDriveRoots` (Windows), and `Config`.
+- **`core/`** -- Public library. Data types (`Item`, `TieredScore`, `StyledRune`), fuzzy scoring (`FuzzyMatch`, `ScoreItem`), column parsing (`ParseLines`, `ComputeWidths`, `FormatRow`), YAML loading (`LoadYAML`, `LoadYAMLFromString`), ANSI parsing (`ParseANSI`, `StripANSI`), tree state management (`State`, `TreeContext`, `PushScope`, `PopScope`, `FilterItems`, `TreeVisibleItems`, `UpdateQueryExpansion`, `SyncTreeCursorToTopMatch`, `BuildScopePath`, `ExpandToPath`, `SetTitle`, `ClearTitle`), key handlers (`HandleUnifiedKey`, `HandleKeyEvent`, `HandleTreeKey`, `HandleSearchKey`, `ClickUnifiedRow`, `syncQueryToCursor`), the `TreeProvider` interface for pluggable data sources, `DirProvider` for filesystem trees, `ListDriveRoots` (Windows), and `Config`.
 - **`render/`** -- Headless rendering infrastructure. `Canvas` interface, `MemScreen` (in-memory grid with snapshot/styled-snapshot output), `Session`/`NewTreeSession` (headless wrapper for WASM/testing), ANSI serialization (`ToANSI`), structured data API (`GetVisibleRows`, `GetPromptState`, `GetUIState`), `Version` variable.
 - **`cmd/fzt/`** -- Minimal scoring CLI: `echo lines | fzt "query"` -> ranked output. No TUI, no interaction.
 - **`cmd/ansicheck/`**, **`cmd/debuginput/`**, **`cmd/icontest/`** -- Dev utilities.
@@ -85,8 +85,9 @@ All in `core/input.go`:
 
 - `HandleUnifiedKey` -- Entry point for unified tree+search mode. Dispatches Shift+HJKL vim navigation, handles mode switching (typing activates search, arrows activate nav), delegates to `HandleTreeKey` or `HandleSearchKey`.
 - `HandleKeyEvent` -- Flat (non-tree) mode key handling with mid-query cursor, scope via Enter/Right on folders.
-- `HandleTreeKey` -- Pure tree navigation when no query is active. Up/Down move cursor, Enter pushes scope on folders, Left collapses/moves to parent.
-- `HandleSearchKey` -- Search-active mode. Typing edits query and auto-positions cursor on top match. Tab autocompletes. Space on folder pushes scope.
+- `HandleTreeKey` -- Pure tree navigation when no query is active. Up/Down move cursor, Enter pushes scope on folders (no-op if already scoped into that folder), Left collapses/moves to parent.
+- `HandleSearchKey` -- Search-active mode. Typing edits query and auto-positions cursor on top match. Tab autocompletes. Space on folder pushes scope. Enter on a folder already scoped into is a no-op.
+- `syncQueryToCursor` -- Called during Up/Down navigation in search mode. Updates the search query to match the highlighted item's name and clears stale Filtered results so the search bar follows the cursor.
 
 ## ANSI Parsing
 
