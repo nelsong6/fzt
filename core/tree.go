@@ -96,6 +96,7 @@ type State struct {
 	MenuVersion      int            // last known version from API, used for conflict detection on save
 	InspectTargetIdx int            // item being inspected (-1 = none)
 	InspectItemIdxs  []int          // indices of temporary property items in AllItems
+	EnvTags          []string       // environment capabilities for display condition filtering
 }
 
 // TopCtx returns a pointer to the top of the context stack.
