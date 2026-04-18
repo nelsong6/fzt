@@ -113,6 +113,12 @@ type State struct {
 	// identical status messages still produce visible feedback (a pulse the
 	// user can see even when content is unchanged).
 	PulseUntil int64
+
+	// Self-update target (mirrored from Config by ApplyConfig). fzt-terminal's
+	// RunUpdate reads these. Empty = fzt defaults.
+	UpdateRepo        string
+	UpdateAssetPrefix string
+	UpdateBinaryName  string
 }
 
 // PulseDurationMs is how long each title pulse lasts.
