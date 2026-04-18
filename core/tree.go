@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ContextKind distinguishes the root context from a command palette context.
@@ -106,16 +107,35 @@ type State struct {
 	// unaffected so every state remains reachable.
 	StatesBannerOn    bool   // true = show state banner, suppress action execution
 	LastActionPreview string // most recent "would execute: ..." snapshot
+
+	// PulseUntil is a unix-millis deadline during which the title bar should
+	// render with reverse-video styling. Bumped on every SetTitle so repeated
+	// identical status messages still produce visible feedback (a pulse the
+	// user can see even when content is unchanged).
+	PulseUntil int64
 }
+
+// PulseDurationMs is how long each title pulse lasts.
+const PulseDurationMs = 350
 
 // TopCtx returns a pointer to the top of the context stack.
 func (s *State) TopCtx() *TreeContext { return &s.Contexts[len(s.Contexts)-1] }
 
 // SetTitle sets a title bar message, evicting any ambient display (timer, etc).
+// Every call also bumps PulseUntil so the frontend can render a brief
+// reverse-video pulse — this guarantees visible feedback even when the same
+// message fires twice in a row (e.g. selecting the same no-op item repeatedly).
 func (s *State) SetTitle(msg string, style int) {
 	s.TitleOverride = msg
 	s.TitleStyle = style
 	s.SyncTimerShown = false
+	s.PulseUntil = time.Now().UnixMilli() + PulseDurationMs
+}
+
+// IsPulsing reports whether the title is currently in its post-SetTitle pulse
+// window. Frontends call this each frame and render reverse video if true.
+func (s *State) IsPulsing() bool {
+	return time.Now().UnixMilli() < s.PulseUntil
 }
 
 // ClearTitle removes the title override and any ambient display.
