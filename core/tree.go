@@ -3,6 +3,7 @@ package core
 import (
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -97,6 +98,14 @@ type State struct {
 	InspectTargetIdx int            // item being inspected (-1 = none)
 	InspectItemIdxs  []int          // indices of temporary property items in AllItems
 	EnvTags          []string       // environment capabilities for display condition filtering
+
+	// State inspector — passive-explorer mode for discovering reachable states.
+	// When StatesBannerOn is true, frontends render Describe() as a banner and
+	// suppress exit-on-select for items with actions (the action is stashed in
+	// LastActionPreview instead). Navigation, scope, and mode transitions are
+	// unaffected so every state remains reachable.
+	StatesBannerOn    bool   // true = show state banner, suppress action execution
+	LastActionPreview string // most recent "would execute: ..." snapshot
 }
 
 // TopCtx returns a pointer to the top of the context stack.
@@ -114,6 +123,46 @@ func (s *State) ClearTitle() {
 	s.TitleOverride = ""
 	s.TitleStyle = 0
 	s.SyncTimerShown = false
+}
+
+// Describe returns a one-line snapshot of the user-visible state. Used by
+// the states-inspector banner — frontends render this verbatim. Fields are
+// space-separated key=value; unset/zero fields are omitted so the line stays
+// short.
+func (s *State) Describe() string {
+	ctx := s.TopCtx()
+	parts := []string{}
+	kind := "normal"
+	if ctx.Kind == ContextCommand {
+		kind = "palette"
+	}
+	parts = append(parts, "ctx="+kind)
+	if d := len(ctx.Scope); d > 0 {
+		parts = append(parts, "scope="+strconv.Itoa(d))
+	}
+	mode := "tree"
+	if ctx.SearchActive {
+		mode = "search"
+	} else if ctx.NavMode {
+		mode = "nav"
+	}
+	parts = append(parts, "mode="+mode)
+	if len(ctx.Query) > 0 {
+		parts = append(parts, "query=\""+string(ctx.Query)+"\"")
+	}
+	if s.EditMode != "" {
+		parts = append(parts, "edit="+s.EditMode)
+	}
+	if s.InspectTargetIdx >= 0 {
+		parts = append(parts, "inspect="+strconv.Itoa(s.InspectTargetIdx))
+	}
+	if s.Dirty {
+		parts = append(parts, "dirty")
+	}
+	if s.LastActionPreview != "" {
+		parts = append(parts, "last="+s.LastActionPreview)
+	}
+	return strings.Join(parts, " ")
 }
 
 // PushContext pushes a new context onto the stack.
