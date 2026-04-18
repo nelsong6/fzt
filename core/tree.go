@@ -128,14 +128,18 @@ const PulseDurationMs = 350
 func (s *State) TopCtx() *TreeContext { return &s.Contexts[len(s.Contexts)-1] }
 
 // SetTitle sets a title bar message, evicting any ambient display (timer, etc).
-// Every call also bumps PulseUntil so the frontend can render a brief
-// reverse-video pulse — this guarantees visible feedback even when the same
-// message fires twice in a row (e.g. selecting the same no-op item repeatedly).
+// Pulses the title only when the new (msg, style) pair is a pure repeat of
+// what's already showing — distinct messages are self-evidently new and don't
+// need the visual flash. Repeat-case pulse is the important one since it's
+// the only time there'd be no other visible change.
 func (s *State) SetTitle(msg string, style int) {
+	isRepeat := s.TitleOverride == msg && s.TitleStyle == style
 	s.TitleOverride = msg
 	s.TitleStyle = style
 	s.SyncTimerShown = false
-	s.PulseUntil = time.Now().UnixMilli() + PulseDurationMs
+	if isRepeat {
+		s.PulseUntil = time.Now().UnixMilli() + PulseDurationMs
+	}
 }
 
 // IsPulsing reports whether the title is currently in its post-SetTitle pulse
