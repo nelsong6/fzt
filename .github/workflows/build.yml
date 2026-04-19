@@ -1,8 +1,10 @@
 name: Build
 
+# Auto-trigger disabled — Claude-driven CI. Run manually via
+# `gh workflow run build.yml -R nelsong6/fzt` when ready to cut a
+# new release and cascade downstream to fzt-frontend + fzt-terminal.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
