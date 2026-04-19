@@ -190,7 +190,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 			ctx.TreeCursor = -1
 			ctx.QueryExpanded = make(map[int]bool)
 		}
-		s.SetTitle("\u232B", 1)
+		s.SetTitle("\u232B", 5)
 		return ""
 	}
 
@@ -201,7 +201,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 				// Activate search without inserting the /
 				ctx.SearchActive = true
 				ctx.NavMode = false
-				s.SetTitle("\uF002", 1)
+				s.SetTitle("\uF002", 5)
 				return ""
 			}
 			if ch == '`' {
@@ -213,7 +213,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 				if ctx.TreeCursor < 0 && len(visible) > 0 {
 					ctx.TreeCursor = 0
 				}
-				s.SetTitle("\uF0A9", 1)
+				s.SetTitle("\uF0A9", 4)
 				return ""
 			}
 			// Space on a folder -> push scope (same as Enter)
@@ -232,7 +232,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 			// elsewhere). No auto-switchback on an unbound keypress.
 			if ctx.NavMode {
 				if navKey, arrow, ok := normalModeNavBinding(ch); ok {
-					s.SetTitle(arrow, 1)
+					s.SetTitle(arrow, 4)
 					action, _ := HandleTreeKey(s, navKey, 0, cfg, searchCols)
 					return action
 				}
@@ -879,11 +879,11 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 			if ch == '/' {
 				// Return to search mode, query preserved
 				ctx.NavMode = false
-				s.SetTitle("\uF002", 1)
+				s.SetTitle("\uF002", 5)
 				return ""
 			}
 			if navKey, arrow, ok := normalModeNavBinding(ch); ok {
-				s.SetTitle(arrow, 1)
+				s.SetTitle(arrow, 4)
 				return HandleSearchKey(s, navKey, 0, cfg, searchCols)
 			}
 			// Unbound key in normal mode: silent (future: dead-key hint)
@@ -899,7 +899,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				ctx.TreeCursor = 0
 				syncQueryToCursor(ctx, visible)
 			}
-			s.SetTitle("\uF0A9", 1)
+			s.SetTitle("\uF0A9", 4)
 			return ""
 		}
 
