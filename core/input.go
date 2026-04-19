@@ -201,6 +201,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 				// Activate search without inserting the /
 				ctx.SearchActive = true
 				ctx.NavMode = false
+				s.SetTitle("\uF002", 1)
 				return ""
 			}
 			if ch == '`' {
@@ -212,7 +213,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 				if ctx.TreeCursor < 0 && len(visible) > 0 {
 					ctx.TreeCursor = 0
 				}
-				s.SetTitle("\u2192", 1)
+				s.SetTitle("\uF0A9", 1)
 				return ""
 			}
 			// Space on a folder -> push scope (same as Enter)
@@ -878,7 +879,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 			if ch == '/' {
 				// Return to search mode, query preserved
 				ctx.NavMode = false
-				s.SetTitle("\U0001F50D", 1)
+				s.SetTitle("\uF002", 1)
 				return ""
 			}
 			if navKey, arrow, ok := normalModeNavBinding(ch); ok {
@@ -898,7 +899,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				ctx.TreeCursor = 0
 				syncQueryToCursor(ctx, visible)
 			}
-			s.SetTitle("\u2192", 1)
+			s.SetTitle("\uF0A9", 1)
 			return ""
 		}
 
