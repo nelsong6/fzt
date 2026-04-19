@@ -146,22 +146,6 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 		return ""
 	}
 
-	// Nav mode + Ctrl+U: clean slate -- exit nav, clear query, deselect
-	if ctx.NavMode && key == tcell.KeyCtrlU {
-		ctx.NavMode = false
-		ctx.Query = nil
-		ctx.Cursor = 0
-		ctx.TreeCursor = -1
-		ctx.QueryExpanded = make(map[int]bool)
-		if len(ctx.Scope) <= 1 {
-			ctx.SearchActive = false
-			ctx.Filtered = nil
-		} else {
-			FilterItems(s, cfg, searchCols)
-		}
-		return ""
-	}
-
 	// Nav mode + Backspace: chop last char of the displayed item name (which
 	// syncQueryToCursor has kept in sync with Query) and return to search mode.
 	// Paired with `/` which also returns to search but preserves the query
@@ -271,10 +255,6 @@ func HandleKeyEvent(s *State, key tcell.Key, ch rune, shift bool, cfg Config, se
 		return ""
 	}
 	switch key {
-	case tcell.KeyCtrlC:
-		s.Cancelled = true
-		return "cancel"
-
 	case tcell.KeyEscape:
 		if len(ctx.Query) > 0 {
 			ctx.Query = nil
@@ -409,53 +389,23 @@ func HandleKeyEvent(s *State, key tcell.Key, ch rune, shift bool, cfg Config, se
 			}
 		}
 
-	case tcell.KeyUp, tcell.KeyCtrlP:
+	case tcell.KeyUp:
 		if ctx.Index > 0 {
 			ctx.Index--
 		} else if ctx.Index == 0 {
 			ctx.Index = -1
 		}
 
-	case tcell.KeyDown, tcell.KeyCtrlN:
+	case tcell.KeyDown:
 		if ctx.Index < len(ctx.Filtered)-1 {
 			ctx.Index++
 		}
 
-	case tcell.KeyCtrlA:
+	case tcell.KeyHome:
 		ctx.Cursor = 0
 
-	case tcell.KeyCtrlE:
+	case tcell.KeyEnd:
 		ctx.Cursor = len(ctx.Query)
-
-	case tcell.KeyCtrlU:
-		ctx.Query = ctx.Query[ctx.Cursor:]
-		ctx.Cursor = 0
-		ctx.Offset = 0
-		FilterItems(s, cfg, searchCols)
-		if len(ctx.Filtered) > 0 {
-			ctx.Index = 0
-		} else {
-			ctx.Index = -1
-		}
-
-	case tcell.KeyCtrlW:
-		if ctx.Cursor > 0 {
-			end := ctx.Cursor
-			for ctx.Cursor > 0 && ctx.Query[ctx.Cursor-1] == ' ' {
-				ctx.Cursor--
-			}
-			for ctx.Cursor > 0 && ctx.Query[ctx.Cursor-1] != ' ' {
-				ctx.Cursor--
-			}
-			ctx.Query = append(ctx.Query[:ctx.Cursor], ctx.Query[end:]...)
-			ctx.Offset = 0
-			FilterItems(s, cfg, searchCols)
-			if len(ctx.Filtered) > 0 {
-				ctx.Index = 0
-			} else {
-				ctx.Index = -1
-			}
-		}
 
 	case tcell.KeyRune:
 		ctx.Query = append(ctx.Query[:ctx.Cursor], append([]rune{ch}, ctx.Query[ctx.Cursor:]...)...)
@@ -499,11 +449,7 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 	visLen := len(visible)
 
 	switch key {
-	case tcell.KeyCtrlC:
-		s.Cancelled = true
-		return "cancel", false
-
-	case tcell.KeyUp, tcell.KeyCtrlP:
+	case tcell.KeyUp:
 		ctx.NavMode = true
 		if visLen > 0 {
 			if ctx.TreeCursor <= 0 {
@@ -514,7 +460,7 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 		}
 		return "", false
 
-	case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyTab:
+	case tcell.KeyDown, tcell.KeyTab:
 		ctx.NavMode = true
 		if visLen > 0 {
 			if ctx.TreeCursor < 0 {
@@ -628,10 +574,6 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []int) string {
 	ctx := s.TopCtx()
 	switch key {
-	case tcell.KeyCtrlC:
-		s.Cancelled = true
-		return "cancel"
-
 	case tcell.KeyEscape:
 		if len(ctx.Query) > 0 {
 			// Clear query, collapse auto-expansions
@@ -659,7 +601,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 		s.Cancelled = true
 		return "cancel"
 
-	case tcell.KeyUp, tcell.KeyCtrlP:
+	case tcell.KeyUp:
 		ctx.NavMode = true
 		visible := TreeVisibleItems(s)
 		if len(visible) > 0 {
@@ -672,7 +614,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 		}
 		return ""
 
-	case tcell.KeyDown, tcell.KeyCtrlN:
+	case tcell.KeyDown:
 		ctx.NavMode = true
 		visible := TreeVisibleItems(s)
 		if len(visible) > 0 {
@@ -823,49 +765,6 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				} else if ctx.TreeCursor+1 < len(visible) {
 					ctx.TreeCursor++
 				}
-			}
-		}
-		return ""
-
-	case tcell.KeyCtrlU:
-		ctx.NavMode = false
-		ctx.Query = nil
-		ctx.Cursor = 0
-		ctx.QueryExpanded = make(map[int]bool)
-		if len(ctx.Scope) <= 1 {
-			ctx.SearchActive = false
-			ctx.Filtered = nil
-		} else {
-			FilterItems(s, cfg, searchCols)
-		}
-		return ""
-
-	case tcell.KeyCtrlW:
-		ctx.NavMode = false
-		if len(ctx.Query) > 0 {
-			// Delete last word from end
-			i := len(ctx.Query) - 1
-			for i > 0 && ctx.Query[i-1] == ' ' {
-				i--
-			}
-			for i > 0 && ctx.Query[i-1] != ' ' {
-				i--
-			}
-			ctx.Query = ctx.Query[:i]
-			ctx.Cursor = len(ctx.Query)
-			if len(ctx.Query) == 0 {
-				ctx.QueryExpanded = make(map[int]bool)
-				ctx.TreeCursor = -1
-				if len(ctx.Scope) <= 1 {
-					ctx.SearchActive = false
-					ctx.Filtered = nil
-				} else {
-					FilterItems(s, cfg, searchCols)
-				}
-			} else {
-				FilterItems(s, cfg, searchCols)
-				UpdateQueryExpansion(s)
-				SyncTreeCursorToTopMatch(s)
 			}
 		}
 		return ""

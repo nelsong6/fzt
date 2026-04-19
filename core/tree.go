@@ -75,7 +75,7 @@ type CommandItem struct {
 // State holds the context stack and global flags.
 type State struct {
 	Contexts         []TreeContext  // context stack. Index 0 = primary dataset. Command palette pushes on top. TopCtx() returns active (top) context.
-	Cancelled        bool           // set by Ctrl+C or Escape from root — signals render loop to exit
+	Cancelled        bool           // set by Escape from root — signals render loop to exit
 	VersionRegistry  []string       // ordered version strings (frontend + engine). Consumed by the `version` palette leaves. Built by InjectCommandFolder.
 	TitleOverride    string         // when non-empty, replaces the default title in the border. Used as a console output line.
 	TitleStyle       int            // 0=default (cyan/bold), 1=success (green), 2=error (red), 3=neutral (slate), 4=nav-mode (matches prompt NavModeFg), 5=search-mode (matches prompt SearchModeFg). Controls TitleOverride color.
