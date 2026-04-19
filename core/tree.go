@@ -76,15 +76,14 @@ type CommandItem struct {
 type State struct {
 	Contexts         []TreeContext  // context stack. Index 0 = primary dataset. Command palette pushes on top. TopCtx() returns active (top) context.
 	Cancelled        bool           // set by Ctrl+C or Escape from root — signals render loop to exit
-	VersionDisplay   string         // string shown in the border top-right. Empty = hidden. Set by "on"/"off" commands in the : palette.
-	VersionRegistry  []string       // ordered version/identity strings. "on" items reference by index in Fields[2]. Built by InjectCommandFolder.
+	VersionRegistry  []string       // ordered version strings (frontend + engine). Consumed by the `version` palette leaves. Built by InjectCommandFolder.
 	TitleOverride    string         // when non-empty, replaces the default title in the border. Used as a console output line.
 	TitleStyle       int            // 0=default (cyan/bold), 1=success (green), 2=error (red). Controls TitleOverride color.
 	Provider         TreeProvider   // optional lazy-loader. PushScope calls LoadChildren when entering a folder with no children.
 	FrontendCommands []CommandItem  // commands for the first level of the : palette. Set by ApplyConfig from Config.FrontendCommands.
 	FrontendName     string         // frontend identifier (e.g. "automate"). Drives scope title ("automate ctl" vs "fzt ctl").
 	FrontendVersion  string         // frontend version string. Registered at index 0 of VersionRegistry.
-	IdentityLabel    string         // loaded identity (e.g. "nelson"). Registered at last index of VersionRegistry, shown via "whoami > on".
+	IdentityLabel    string         // loaded identity (e.g. "nelson"). Emitted as a one-shot status by the :whoami palette leaf.
 	SyncIcon         string         // non-empty = show icon in top-right corner of border (e.g. "⟳" when sync available)
 	SyncNextCheck    int64          // unix timestamp — when the next background sync check fires (0 = disabled)
 	SyncTimerShown   bool           // true = show countdown to next sync check in the title bar

@@ -192,7 +192,6 @@ type PromptState struct {
 type UIState struct {
 	Title        string `json:"title"`
 	TitlePos     string `json:"titlePos"`
-	Version      string `json:"version"`
 	Label        string `json:"label"`
 	Border       bool   `json:"border"`
 	TreeOffset   int    `json:"treeOffset"`
@@ -292,12 +291,9 @@ func (sess *Session) GetUIState() UIState {
 
 	title := sess.cfg.Title
 
-	version := sess.state.VersionDisplay
-
 	return UIState{
 		Title:        title,
 		TitlePos:     sess.cfg.TitlePos,
-		Version:      version,
 		Label:        sess.cfg.Label,
 		Border:       sess.cfg.Border,
 		TreeOffset:   ctx.TreeOffset,
