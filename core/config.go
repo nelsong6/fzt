@@ -33,11 +33,11 @@ type Config struct {
 	FrontendVersion  string        // displayed via "version > on" in the : palette
 	FrontendCommands []CommandItem // registered commands for the first level of the : palette
 	InitialDisplay   string        // mapped to State.IdentityLabel — shown via "whoami > on" in : palette
-	// HidePalette suppresses the visible `:` root row. The palette and its
-	// commands still exist in the tree and remain reachable by typing `:`
-	// (Hidden items participate in search and give a "takeover" view when
-	// entered), but no row shows at root. Set by consumers where the palette
-	// is meaningless to the current user — e.g. unauthenticated homepage
+	// HidePalette suppresses the `:` command palette entirely. The palette
+	// items aren't injected into the tree at all — no `:` row at root, and
+	// typing `:` won't reach any palette commands since they aren't in
+	// AllItems for search to find. Set by consumers where the palette is
+	// meaningless to the current user — e.g. unauthenticated homepage
 	// visitors for whom "edit"/"logout" make no sense.
 	HidePalette bool
 	FoldersOnly      bool // folders are the selectable items — Enter on an already-scoped folder returns "select:" instead of no-op
