@@ -60,6 +60,7 @@ Items with the same name in different folders are uniquely searchable. Ancestor 
 - `SearchCols` (1-based) restricts which fields qualify for the Name tier. If empty, falls back to `Nth`. Description fields (index 1+) are always searchable at the Desc tier regardless.
 - `DepthPenalty` is subtracted from Name tier score as `relativeDepth * DepthPenalty`. Relative depth is measured from current scope, not absolute. All callers use 5.
 - `FrontendName`/`FrontendVersion`/`FrontendCommands` are set by the ecosystem (fzt-terminal ApplyConfig), not the engine. They drive the two-level `:` palette via InjectCommandFolder.
+- `HidePalette` suppresses the `:` palette entirely. When set, `InjectCommandFolder` early-returns — no `:` root row, no palette items in `AllItems`, so typing `:` can't reach them via search either. Set by consumers where the palette is meaningless (my-homepage's unauthenticated playground visitors, for whom edit/logout make no sense). Default false; fzt-automate / fzt-picker / authenticated homepage keep the palette visible.
 - `InitialDisplay` maps to `State.IdentityLabel` -- shown via "whoami > on" in the command palette.
 - `FoldersOnly` changes Enter key behavior: Enter on an already-scoped folder returns `"select:"` instead of no-op. Used by picker's folder-pick mode.
 
@@ -78,17 +79,18 @@ Tree state lives in `core/`. `State` holds a stack of `TreeContext` values, each
 - **Provider**: `TreeProvider` interface enables lazy-loading. When `PushScope` encounters a folder with no loaded children and a provider is set, it calls `LoadChildren` to splice items dynamically.
 - **Filtering**: `FilterItems` applies the current query to the search pool. In tiered mode, searches all descendants (optionally depth-limited via `SearchDepth`) with ancestor name inheritance. Results are sorted by `TieredScore.Less()`.
 - **Auto-expansion**: `UpdateQueryExpansion` sets `QueryExpanded` flags to reveal the top match. `SyncTreeCursorToTopMatch` positions the cursor on it.
-- **Hidden folders**: Items with `Hidden: true` are excluded from the visible tree but participate in search. The `:` command palette folder uses this -- it's invisible at root but becomes visible when scoped into. `TreeVisibleItems` starts from a hidden folder's children (exclusive "takeover" view) when the user is scoped inside it.
+- **Hidden folders**: Items with `Hidden: true` are excluded from the visible tree but participate in search. `TreeVisibleItems` starts from a hidden folder's children (exclusive "takeover" view) when the user is scoped inside it. The `:` palette folder used to be Hidden (2026-04-19: flipped to visible so it shows as a regular row at root — discoverability over stealth). No current consumer marks any item Hidden — the field is retained for future use.
 
 ### Input handlers
 
 All in `core/input.go`:
 
-- `HandleUnifiedKey` -- Entry point for unified tree+search mode. Dispatches Shift+HJKL vim navigation, handles mode switching (typing activates search, arrows activate nav), delegates to `HandleTreeKey` or `HandleSearchKey`.
-- `HandleKeyEvent` -- Flat (non-tree) mode key handling with mid-query cursor, scope via Enter/Right on folders.
-- `HandleTreeKey` -- Pure tree navigation when no query is active. Up/Down move cursor, Enter pushes scope on folders (selects the folder if `FoldersOnly` and already scoped, otherwise no-op), Left collapses/moves to parent.
-- `HandleSearchKey` -- Search-active mode. Typing edits query and auto-positions cursor on top match. Tab autocompletes. Space on folder pushes scope. Enter on a folder already scoped into selects it if `FoldersOnly`, otherwise no-op.
+- `HandleUnifiedKey(s, key, ch, shift, cfg, searchCols)` -- Entry point for unified tree+search mode. Takes a `shift bool` so event sources can report modifier state (picker CGo via `GetKeyState`, WASM via browser events, tui.Run via `ev.Modifiers()`). Handles rename-mode dispatch, Shift+Enter universal confirm-select, normal-mode lowercase `hjkl` + `/` + `` ` `` + Backspace routing, and delegates other keys to `HandleTreeKey` / `HandleSearchKey`. Ctrl bindings are gone — no Ctrl+C/P/N/A/E/U/W anywhere.
+- `HandleKeyEvent(s, key, ch, shift, cfg, searchCols)` -- Flat (non-tree) mode. Same shift plumb. Shift+Enter commits the highlighted filtered item; Home/End move the query cursor; Escape cascades (clear query → pop scope → pop context → quit).
+- `HandleTreeKey` -- Pure tree navigation when no query is active. Up/Down move cursor, Enter pushes scope on folders (selects the folder if `FoldersOnly` and already scoped, otherwise no-op), Left collapses/moves to parent. No shift param needed — the caller (`HandleUnifiedKey`) has already consumed Shift+Enter before delegating.
+- `HandleSearchKey` -- Search-active mode. Typing edits query (capitals + shifted symbols literal — Shift is Shift); lowercase `hjkl` recursively routes to nav when NavMode is set; `/` exits normal mode back to search; `` ` `` enters normal mode from search. Tab autocompletes. Space on folder pushes scope. Shift+Enter commits cursor's item.
 - `syncQueryToCursor` -- Called during Up/Down navigation in search mode. Updates the search query to match the highlighted item's name and clears stale Filtered results so the search bar follows the cursor.
+- `normalModeNavBinding(ch)` -- Maps `'h'` / `'j'` / `'k'` / `'l'` to their tcell arrow keys + title-glyph strings. Used by both `HandleUnifiedKey`'s SA=false branch and `HandleSearchKey`'s NavMode branch so the hjkl vocabulary is centralized.
 
 ## ANSI Parsing
 
