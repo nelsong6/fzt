@@ -34,6 +34,9 @@ type SessionFrame struct {
 	CursorY int
 }
 
+// SessionAction describes an action emitted by a session event.
+type SessionAction = core.ActionResult
+
 // State returns the underlying core.State for direct manipulation (e.g. command injection).
 func (sess *Session) State() *core.State {
 	return sess.state
@@ -105,27 +108,41 @@ func (sess *Session) Resize(w, h int) SessionFrame {
 // Shift+Enter as a universal confirm-select. Callers that can't
 // observe modifier state should pass false.
 func (sess *Session) HandleKey(key tcell.Key, ch rune, shift bool) (SessionFrame, string) {
-	var action string
+	frame, result := sess.HandleKeyResult(key, ch, shift)
+	return frame, result.Action
+}
+
+// HandleKeyResult processes a key event and returns the action result with the
+// item that produced a select action when one is known.
+func (sess *Session) HandleKeyResult(key tcell.Key, ch rune, shift bool) (SessionFrame, SessionAction) {
+	var result SessionAction
 	ctx := sess.state.TopCtx()
 	if ctx.TreeExpanded != nil {
-		action = core.HandleUnifiedKey(sess.state, key, ch, shift, sess.cfg, sess.searchCols)
+		result = core.HandleUnifiedKeyResult(sess.state, key, ch, shift, sess.cfg, sess.searchCols)
 	} else {
-		action = core.HandleKeyEvent(sess.state, key, ch, shift, sess.cfg, sess.searchCols)
+		result = core.HandleKeyEventResult(sess.state, key, ch, shift, sess.cfg, sess.searchCols)
 	}
 	frame := sess.Render()
-	return frame, action
+	return frame, result
 }
 
 // ClickRow handles a mouse click on a visual row in unified mode.
 func (sess *Session) ClickRow(row int) (SessionFrame, string) {
+	frame, result := sess.ClickRowResult(row)
+	return frame, result.Action
+}
+
+// ClickRowResult handles a mouse click in unified mode and returns the action
+// result with the selected item when the click selects one.
+func (sess *Session) ClickRowResult(row int) (SessionFrame, SessionAction) {
 	ctx := sess.state.TopCtx()
 	if ctx.TreeExpanded == nil {
-		return sess.Render(), ""
+		return sess.Render(), SessionAction{}
 	}
 	_, h := sess.screen.Size()
-	action := core.ClickUnifiedRow(sess.state, row, sess.cfg, h)
+	result := core.ClickUnifiedRowResult(sess.state, row, sess.cfg, h)
 	frame := sess.Render()
-	return frame, action
+	return frame, result
 }
 
 // SelectedItemPath returns the full filesystem path of the currently selected tree item.
@@ -164,6 +181,14 @@ func (sess *Session) SelectedURL() string {
 		if item.Action != nil && item.Action.Type == "url" {
 			return item.Action.Target
 		}
+	}
+	return ""
+}
+
+// ActionURL returns the URL attached to the item that emitted an action.
+func ActionURL(result SessionAction) string {
+	if result.HasItem && result.Item.Action != nil && result.Item.Action.Type == "url" {
+		return result.Item.Action.Target
 	}
 	return ""
 }

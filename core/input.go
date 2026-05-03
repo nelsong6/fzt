@@ -117,6 +117,30 @@ func handleRenameKey(s *State, key tcell.Key, ch rune) string {
 	return ""
 }
 
+// ActionResult describes an action emitted by input handling.
+// Item is populated when Action was produced by selecting a concrete item.
+type ActionResult struct {
+	Action  string
+	Item    Item
+	HasItem bool
+}
+
+func noActionResult() ActionResult {
+	return ActionResult{}
+}
+
+func actionResult(action string) ActionResult {
+	return ActionResult{Action: action}
+}
+
+func selectActionResult(item Item, cfg Config) ActionResult {
+	return ActionResult{
+		Action:  "select:" + FormatOutput(item, cfg),
+		Item:    item,
+		HasItem: true,
+	}
+}
+
 // HandleUnifiedKey handles all key events in unified tree+search mode.
 // The tree is the single navigation surface. Typing filters and auto-expands
 // the tree to reveal matches. Up/Down always move the tree cursor.
@@ -126,11 +150,17 @@ func handleRenameKey(s *State, key tcell.Key, ch rune) string {
 // that can't report modifier state (inline raw-byte parser, anything
 // reading from a pipe) should pass false.
 func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, searchCols []int) string {
+	return HandleUnifiedKeyResult(s, key, ch, shift, cfg, searchCols).Action
+}
+
+// HandleUnifiedKeyResult is like HandleUnifiedKey, but also returns the item
+// that produced a select action when one is known.
+func HandleUnifiedKeyResult(s *State, key tcell.Key, ch rune, shift bool, cfg Config, searchCols []int) ActionResult {
 	ctx := s.TopCtx()
 
 	// Rename mode — all input goes to EditBuffer
 	if s.EditMode == "rename" {
-		return handleRenameKey(s, key, ch)
+		return actionResult(handleRenameKey(s, key, ch))
 	}
 
 	// Shift+Enter — universal confirm-select: commit whatever the cursor is on,
@@ -138,12 +168,12 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 	if shift && key == tcell.KeyEnter {
 		visible := TreeVisibleItems(s)
 		if ctx.TreeCursor >= 0 && ctx.TreeCursor < len(visible) {
-			return "select:" + FormatOutput(visible[ctx.TreeCursor].Item, cfg)
+			return selectActionResult(visible[ctx.TreeCursor].Item, cfg)
 		}
 		if len(ctx.Filtered) > 0 {
-			return "select:" + FormatOutput(ctx.Filtered[0], cfg)
+			return selectActionResult(ctx.Filtered[0], cfg)
 		}
-		return ""
+		return noActionResult()
 	}
 
 	// Nav mode + Backspace: chop last char of the displayed item name (which
@@ -175,7 +205,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 			ctx.QueryExpanded = make(map[int]bool)
 		}
 		s.SetTitle("\u232B", 5)
-		return ""
+		return noActionResult()
 	}
 
 	// When no search active, delegate to tree navigation (except printable chars)
@@ -186,7 +216,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 				ctx.SearchActive = true
 				ctx.NavMode = false
 				s.SetTitle("\uF002", 5)
-				return ""
+				return noActionResult()
 			}
 			if ch == '`' {
 				// Explicit entry into normal mode (cursor-on-tree). Mirrors the
@@ -198,7 +228,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 					ctx.TreeCursor = 0
 				}
 				s.SetTitle("\uF0A9", 4)
-				return ""
+				return noActionResult()
 			}
 			// Space on a folder -> push scope (same as Enter)
 			if ch == ' ' {
@@ -207,7 +237,7 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 					row := visible[ctx.TreeCursor]
 					if row.Item.HasChildren {
 						PushScope(s, row.ItemIdx, cfg, searchCols)
-						return ""
+						return noActionResult()
 					}
 				}
 			}
@@ -217,10 +247,10 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 			if ctx.NavMode {
 				if navKey, arrow, ok := normalModeNavBinding(ch); ok {
 					s.SetTitle(arrow, 4)
-					action, _ := HandleTreeKey(s, navKey, 0, cfg, searchCols)
-					return action
+					result, _ := HandleTreeKeyResult(s, navKey, 0, cfg, searchCols)
+					return result
 				}
-				return ""
+				return noActionResult()
 			}
 			// Not in nav mode (boot or cleared-to-empty-root): printable activates search
 			ctx.SearchActive = true
@@ -230,14 +260,14 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 			FilterItems(s, cfg, searchCols)
 			UpdateQueryExpansion(s)
 			SyncTreeCursorToTopMatch(s)
-			return ""
+			return noActionResult()
 		}
-		action, _ := HandleTreeKey(s, key, ch, cfg, searchCols)
-		return action
+		result, _ := HandleTreeKeyResult(s, key, ch, cfg, searchCols)
+		return result
 	}
 
 	// Search active -- unified handling
-	return HandleSearchKey(s, key, ch, cfg, searchCols)
+	return HandleSearchKeyResult(s, key, ch, cfg, searchCols)
 }
 
 // HandleKeyEvent processes a single key event against the TUI state (flat mode).
@@ -246,13 +276,19 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 // shift reports whether Shift was held. Only Shift+Enter is observed — it
 // commits the highlighted filtered item without scope-pushing folders.
 func HandleKeyEvent(s *State, key tcell.Key, ch rune, shift bool, cfg Config, searchCols []int) string {
+	return HandleKeyEventResult(s, key, ch, shift, cfg, searchCols).Action
+}
+
+// HandleKeyEventResult is like HandleKeyEvent, but also returns the item that
+// produced a select action when one is known.
+func HandleKeyEventResult(s *State, key tcell.Key, ch rune, shift bool, cfg Config, searchCols []int) ActionResult {
 	ctx := s.TopCtx()
 	// Shift+Enter — universal confirm-select, parallel to the tree-mode handler.
 	if shift && key == tcell.KeyEnter {
 		if ctx.Index >= 0 && ctx.Index < len(ctx.Filtered) {
-			return "select:" + FormatOutput(ctx.Filtered[ctx.Index], cfg)
+			return selectActionResult(ctx.Filtered[ctx.Index], cfg)
 		}
-		return ""
+		return noActionResult()
 	}
 	switch key {
 	case tcell.KeyEscape:
@@ -266,7 +302,7 @@ func HandleKeyEvent(s *State, key tcell.Key, ch rune, shift bool, cfg Config, se
 			} else {
 				ctx.Index = -1
 			}
-			return ""
+			return noActionResult()
 		}
 		if cfg.Tiered && len(ctx.Scope) > 1 {
 			ctx.Scope = ctx.Scope[:len(ctx.Scope)-1]
@@ -281,10 +317,10 @@ func HandleKeyEvent(s *State, key tcell.Key, ch rune, shift bool, cfg Config, se
 			ctx.Index = prev.Index
 			ctx.Offset = prev.Offset
 			FilterItems(s, cfg, searchCols)
-			return ""
+			return noActionResult()
 		}
 		s.Cancelled = true
-		return "cancel"
+		return actionResult("cancel")
 
 	case tcell.KeyEnter:
 		if ctx.Index >= 0 && ctx.Index < len(ctx.Filtered) {
@@ -305,7 +341,7 @@ func HandleKeyEvent(s *State, key tcell.Key, ch rune, shift bool, cfg Config, se
 					FilterItems(s, cfg, searchCols)
 				}
 			} else {
-				return "select:" + FormatOutput(selected, cfg)
+				return selectActionResult(selected, cfg)
 			}
 		}
 
@@ -419,7 +455,7 @@ func HandleKeyEvent(s *State, key tcell.Key, ch rune, shift bool, cfg Config, se
 		}
 	}
 
-	return ""
+	return noActionResult()
 }
 
 // FormatOutput formats the selected item for output based on accept-nth configuration.
@@ -444,6 +480,13 @@ func FormatOutput(item Item, cfg Config) string {
 
 // HandleTreeKey processes a key event when no query is active (tree navigation).
 func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []int) (action string, switchToSearch bool) {
+	result, switchToSearch := HandleTreeKeyResult(s, key, ch, cfg, searchCols)
+	return result.Action, switchToSearch
+}
+
+// HandleTreeKeyResult is like HandleTreeKey, but also returns the item that
+// produced a select action when one is known.
+func HandleTreeKeyResult(s *State, key tcell.Key, ch rune, cfg Config, searchCols []int) (ActionResult, bool) {
 	ctx := s.TopCtx()
 	visible := TreeVisibleItems(s)
 	visLen := len(visible)
@@ -458,7 +501,7 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 				ctx.TreeCursor--
 			}
 		}
-		return "", false
+		return noActionResult(), false
 
 	case tcell.KeyDown, tcell.KeyTab:
 		ctx.NavMode = true
@@ -472,7 +515,7 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 				}
 			}
 		}
-		return "", false
+		return noActionResult(), false
 
 	case tcell.KeyBacktab:
 		ctx.NavMode = true
@@ -482,7 +525,7 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 				ctx.TreeCursor = visLen - 1
 			}
 		}
-		return "", false
+		return noActionResult(), false
 
 	case tcell.KeyEnter:
 		if ctx.TreeCursor >= 0 && ctx.TreeCursor < visLen {
@@ -492,19 +535,19 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 				if curScope.ParentIdx == row.ItemIdx {
 					// Already scoped into this folder — select it (folder-only) or trigger folder-link or no-op
 					if cfg.FoldersOnly {
-						return "select:" + FormatOutput(row.Item, cfg), false
+						return selectActionResult(row.Item, cfg), false
 					}
 					if row.Item.Action != nil && row.Item.Action.Type == "url" {
-						return "select:" + FormatOutput(row.Item, cfg), false
+						return selectActionResult(row.Item, cfg), false
 					}
-					return "", false
+					return noActionResult(), false
 				}
 				PushScope(s, row.ItemIdx, cfg, searchCols)
-				return "", false
+				return noActionResult(), false
 			}
-			return "select:" + FormatOutput(row.Item, cfg), false
+			return selectActionResult(row.Item, cfg), false
 		}
-		return "", false
+		return noActionResult(), false
 
 	case tcell.KeyRight:
 		ctx.NavMode = true
@@ -514,7 +557,7 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 				PushScope(s, row.ItemIdx, cfg, searchCols)
 			}
 		}
-		return "", false
+		return noActionResult(), false
 
 	case tcell.KeyLeft:
 		ctx.NavMode = true
@@ -533,45 +576,51 @@ func HandleTreeKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []in
 				}
 			}
 		}
-		return "", false
+		return noActionResult(), false
 
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		// Pop scope first, then context
 		if len(ctx.Scope) > 1 {
 			PopScope(s, cfg, searchCols)
-			return "", false
+			return noActionResult(), false
 		}
 		if len(s.Contexts) > 1 {
 			s.PopContext()
-			return "", false
+			return noActionResult(), false
 		}
-		return "", false
+		return noActionResult(), false
 
 	case tcell.KeyEscape:
 		// Pop scope first, then context
 		if len(ctx.Scope) > 1 {
 			PopScope(s, cfg, searchCols)
-			return "", false
+			return noActionResult(), false
 		}
 		if len(s.Contexts) > 1 {
 			s.PopContext()
-			return "", false
+			return noActionResult(), false
 		}
 		// Root context with nothing to clear -- exit
 		s.Cancelled = true
-		return "cancel", false
+		return actionResult("cancel"), false
 
 	case tcell.KeyRune:
-		return "", true
+		return noActionResult(), true
 	}
 
-	return "", false
+	return noActionResult(), false
 }
 
 // HandleSearchKey handles all keys when search is active.
 // The tree is always the navigation surface -- Up/Down move the tree cursor,
 // typing edits the query and auto-positions the cursor on the top match.
 func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []int) string {
+	return HandleSearchKeyResult(s, key, ch, cfg, searchCols).Action
+}
+
+// HandleSearchKeyResult is like HandleSearchKey, but also returns the item
+// that produced a select action when one is known.
+func HandleSearchKeyResult(s *State, key tcell.Key, ch rune, cfg Config, searchCols []int) ActionResult {
 	ctx := s.TopCtx()
 	switch key {
 	case tcell.KeyEscape:
@@ -587,7 +636,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				syncQueryToCursor(ctx, visible)
 			}
 			s.SetTitle("\uF0A9", 4)
-			return ""
+			return noActionResult()
 		}
 		if len(ctx.Query) > 0 {
 			// Clear query, collapse auto-expansions
@@ -601,19 +650,19 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 			} else {
 				FilterItems(s, cfg, searchCols)
 			}
-			return ""
+			return noActionResult()
 		}
 		if len(ctx.Scope) > 1 {
 			PopScope(s, cfg, searchCols)
-			return ""
+			return noActionResult()
 		}
 		// At root with empty query -- pop context if stacked, else exit
 		if len(s.Contexts) > 1 {
 			s.PopContext()
-			return ""
+			return noActionResult()
 		}
 		s.Cancelled = true
-		return "cancel"
+		return actionResult("cancel")
 
 	case tcell.KeyUp:
 		ctx.NavMode = true
@@ -626,7 +675,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 			}
 			syncQueryToCursor(ctx, visible)
 		}
-		return ""
+		return noActionResult()
 
 	case tcell.KeyDown:
 		ctx.NavMode = true
@@ -642,7 +691,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 			}
 			syncQueryToCursor(ctx, visible)
 		}
-		return ""
+		return noActionResult()
 
 	case tcell.KeyTab:
 		// Autocomplete: set query to the top match's name.
@@ -666,7 +715,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				}
 			}
 		}
-		return ""
+		return noActionResult()
 
 	case tcell.KeyEnter:
 		// Act on tree cursor item
@@ -678,17 +727,17 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				if curScope.ParentIdx == row.ItemIdx {
 					// Already scoped into this folder — select it (folder-only) or trigger folder-link or no-op
 					if cfg.FoldersOnly {
-						return "select:" + FormatOutput(row.Item, cfg)
+						return selectActionResult(row.Item, cfg)
 					}
 					if row.Item.Action != nil && row.Item.Action.Type == "url" {
-						return "select:" + FormatOutput(row.Item, cfg)
+						return selectActionResult(row.Item, cfg)
 					}
-					return ""
+					return noActionResult()
 				}
 				PushScope(s, row.ItemIdx, cfg, searchCols)
-				return ""
+				return noActionResult()
 			}
-			return "select:" + FormatOutput(row.Item, cfg)
+			return selectActionResult(row.Item, cfg)
 		}
 		// No cursor -- act on top match
 		if len(ctx.Filtered) > 0 {
@@ -699,30 +748,30 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 					curScope := ctx.Scope[len(ctx.Scope)-1]
 					if curScope.ParentIdx == idx {
 						if cfg.FoldersOnly {
-							return "select:" + FormatOutput(selected, cfg)
+							return selectActionResult(selected, cfg)
 						}
 						if selected.Action != nil && selected.Action.Type == "url" {
-							return "select:" + FormatOutput(selected, cfg)
+							return selectActionResult(selected, cfg)
 						}
-						return ""
+						return noActionResult()
 					}
 					PushScope(s, idx, cfg, searchCols)
 				}
-				return ""
+				return noActionResult()
 			}
-			return "select:" + FormatOutput(selected, cfg)
+			return selectActionResult(selected, cfg)
 		}
-		return ""
+		return noActionResult()
 
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		ctx.NavMode = false
 		if len(ctx.Query) == 0 && len(ctx.Scope) > 1 {
 			PopScope(s, cfg, searchCols)
-			return ""
+			return noActionResult()
 		}
 		if len(ctx.Query) == 0 && len(s.Contexts) > 1 {
 			s.PopContext()
-			return ""
+			return noActionResult()
 		}
 		if len(ctx.Query) > 0 {
 			ctx.Query = ctx.Query[:len(ctx.Query)-1]
@@ -742,7 +791,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				SyncTreeCursorToTopMatch(s)
 			}
 		}
-		return ""
+		return noActionResult()
 
 	case tcell.KeyLeft:
 		// Tree navigation: collapse or move to parent
@@ -765,7 +814,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				ctx.NavMode = false
 			}
 		}
-		return ""
+		return noActionResult()
 
 	case tcell.KeyRight:
 		ctx.NavMode = true
@@ -781,7 +830,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				}
 			}
 		}
-		return ""
+		return noActionResult()
 
 	case tcell.KeyRune:
 		// Normal mode (arrow-nav engaged): letter keys are nav bindings or no-op.
@@ -793,14 +842,14 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				// Return to search mode, query preserved
 				ctx.NavMode = false
 				s.SetTitle("\uF002", 5)
-				return ""
+				return noActionResult()
 			}
 			if navKey, arrow, ok := normalModeNavBinding(ch); ok {
 				s.SetTitle(arrow, 4)
-				return HandleSearchKey(s, navKey, 0, cfg, searchCols)
+				return HandleSearchKeyResult(s, navKey, 0, cfg, searchCols)
 			}
 			// Unbound key in normal mode: silent (future: dead-key hint)
-			return ""
+			return noActionResult()
 		}
 
 		if ch == '`' {
@@ -813,7 +862,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				syncQueryToCursor(ctx, visible)
 			}
 			s.SetTitle("\uF0A9", 4)
-			return ""
+			return noActionResult()
 		}
 
 		ctx.NavMode = false
@@ -825,7 +874,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 				row := visible[ctx.TreeCursor]
 				if row.Item.HasChildren {
 					PushScope(s, row.ItemIdx, cfg, searchCols)
-					return ""
+					return noActionResult()
 				}
 			}
 			// No cursor (hidden top match) -- push scope into it
@@ -835,7 +884,7 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 					idx := FindInAll(ctx.AllItems, top)
 					if idx >= 0 {
 						PushScope(s, idx, cfg, searchCols)
-						return ""
+						return noActionResult()
 					}
 				}
 			}
@@ -848,14 +897,20 @@ func HandleSearchKey(s *State, key tcell.Key, ch rune, cfg Config, searchCols []
 		FilterItems(s, cfg, searchCols)
 		UpdateQueryExpansion(s)
 		SyncTreeCursorToTopMatch(s)
-		return ""
+		return noActionResult()
 	}
 
-	return ""
+	return noActionResult()
 }
 
 // ClickUnifiedRow handles a click on a visual row in the unified view.
 func ClickUnifiedRow(s *State, row int, cfg Config, h int) string {
+	return ClickUnifiedRowResult(s, row, cfg, h).Action
+}
+
+// ClickUnifiedRowResult is like ClickUnifiedRow, but also returns the item
+// that produced a select action when one is known.
+func ClickUnifiedRowResult(s *State, row int, cfg Config, h int) ActionResult {
 	ctx := s.TopCtx()
 	borderOffset := 0
 	if cfg.Border {
@@ -871,19 +926,18 @@ func ClickUnifiedRow(s *State, row int, cfg Config, h int) string {
 	itemRow := row - firstItemRow
 
 	if itemRow < 0 {
-		return ""
+		return noActionResult()
 	}
 
 	vi := ctx.TreeOffset + itemRow
 	if vi >= len(visible) {
-		return ""
+		return noActionResult()
 	}
 	ctx.TreeCursor = vi
 	tr := visible[vi]
 	if tr.Item.HasChildren {
 		ctx.TreeExpanded[tr.ItemIdx] = !ctx.TreeExpanded[tr.ItemIdx]
-		return ""
+		return noActionResult()
 	}
-	return "select:" + FormatOutput(tr.Item, cfg)
+	return selectActionResult(tr.Item, cfg)
 }
-
