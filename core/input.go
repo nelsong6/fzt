@@ -158,6 +158,10 @@ func HandleUnifiedKey(s *State, key tcell.Key, ch rune, shift bool, cfg Config, 
 func HandleUnifiedKeyResult(s *State, key tcell.Key, ch rune, shift bool, cfg Config, searchCols []int) ActionResult {
 	ctx := s.TopCtx()
 
+	if s.PromptMode != "" {
+		return HandlePromptModeKeyResult(s, key, ch)
+	}
+
 	// Rename mode — all input goes to EditBuffer
 	if s.EditMode == "rename" {
 		return actionResult(handleRenameKey(s, key, ch))
@@ -268,6 +272,53 @@ func HandleUnifiedKeyResult(s *State, key tcell.Key, ch rune, shift bool, cfg Co
 
 	// Search active -- unified handling
 	return HandleSearchKeyResult(s, key, ch, cfg, searchCols)
+}
+
+func HandlePromptModeKeyResult(s *State, key tcell.Key, ch rune) ActionResult {
+	switch key {
+	case tcell.KeyEscape:
+		s.ExitPromptMode()
+		return noActionResult()
+	case tcell.KeyEnter:
+		query := strings.TrimSpace(string(s.PromptQuery))
+		action := s.PromptAction
+		s.ExitPromptMode()
+		if query == "" || action == "" {
+			return noActionResult()
+		}
+		return actionResult("prompt:" + action + ":" + query)
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if s.PromptCursor > 0 && len(s.PromptQuery) > 0 {
+			s.PromptQuery = append(s.PromptQuery[:s.PromptCursor-1], s.PromptQuery[s.PromptCursor:]...)
+			s.PromptCursor--
+		}
+	case tcell.KeyDelete:
+		if s.PromptCursor >= 0 && s.PromptCursor < len(s.PromptQuery) {
+			s.PromptQuery = append(s.PromptQuery[:s.PromptCursor], s.PromptQuery[s.PromptCursor+1:]...)
+		}
+	case tcell.KeyLeft:
+		if s.PromptCursor > 0 {
+			s.PromptCursor--
+		}
+	case tcell.KeyRight:
+		if s.PromptCursor < len(s.PromptQuery) {
+			s.PromptCursor++
+		}
+	case tcell.KeyHome:
+		s.PromptCursor = 0
+	case tcell.KeyEnd:
+		s.PromptCursor = len(s.PromptQuery)
+	case tcell.KeyRune:
+		if ch == 0 {
+			return noActionResult()
+		}
+		if s.PromptCursor < 0 || s.PromptCursor > len(s.PromptQuery) {
+			s.PromptCursor = len(s.PromptQuery)
+		}
+		s.PromptQuery = append(s.PromptQuery[:s.PromptCursor], append([]rune{ch}, s.PromptQuery[s.PromptCursor:]...)...)
+		s.PromptCursor++
+	}
+	return noActionResult()
 }
 
 // HandleKeyEvent processes a single key event against the TUI state (flat mode).
@@ -911,6 +962,9 @@ func ClickUnifiedRow(s *State, row int, cfg Config, h int) string {
 // ClickUnifiedRowResult is like ClickUnifiedRow, but also returns the item
 // that produced a select action when one is known.
 func ClickUnifiedRowResult(s *State, row int, cfg Config, h int) ActionResult {
+	if s.PromptMode != "" {
+		return noActionResult()
+	}
 	ctx := s.TopCtx()
 	borderOffset := 0
 	if cfg.Border {

@@ -210,6 +210,7 @@ type VisibleRow struct {
 // PromptState describes the prompt bar state for DOM rendering.
 type PromptState struct {
 	Mode      string   `json:"mode"`      // "search" or "nav"
+	Icon      string   `json:"icon"`      // optional frontend prompt icon override
 	ScopePath []string `json:"scopePath"` // breadcrumb segments
 	Query     string   `json:"query"`
 	Cursor    int      `json:"cursor"`
@@ -268,6 +269,24 @@ func (sess *Session) GetVisibleRows() []VisibleRow {
 
 // GetPromptState returns structured prompt bar state.
 func (sess *Session) GetPromptState() PromptState {
+	if sess.state.PromptMode != "" {
+		icon := ""
+		if sess.state.PromptIcon != 0 {
+			icon = string(sess.state.PromptIcon)
+		}
+		hint := sess.state.PromptPlaceholder
+		if hint == "" {
+			hint = "search..."
+		}
+		return PromptState{
+			Mode:   sess.state.PromptMode,
+			Icon:   icon,
+			Query:  string(sess.state.PromptQuery),
+			Cursor: sess.state.PromptCursor,
+			Hint:   hint,
+		}
+	}
+
 	ctx := sess.state.TopCtx()
 
 	mode := "search"

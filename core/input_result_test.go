@@ -67,3 +67,57 @@ func TestClickUnifiedRowResultReportsClickedItem(t *testing.T) {
 		t.Fatalf("selected target = %#v, want Wikipedia URL", result.Item.Action)
 	}
 }
+
+func TestPromptModeEmitsFrontendActionAndRestoresTreeState(t *testing.T) {
+	s, searchCols, cfg := testTreeState(t)
+	ctx := s.TopCtx()
+	ctx.Query = []rune("wiki")
+	ctx.Cursor = len(ctx.Query)
+	ctx.SearchActive = true
+	ctx.NavMode = false
+	FilterItems(s, cfg, searchCols)
+	SyncTreeCursorToTopMatch(s)
+	beforeCursor := ctx.TreeCursor
+
+	s.EnterPromptMode("google", "google-search", 'G', "search Google...")
+	for _, ch := range "golang wasm" {
+		result := HandleUnifiedKeyResult(s, tcell.KeyRune, ch, false, cfg, searchCols)
+		if result.Action != "" {
+			t.Fatalf("typing emitted action %q", result.Action)
+		}
+	}
+	result := HandleUnifiedKeyResult(s, tcell.KeyEnter, 0, false, cfg, searchCols)
+	if result.Action != "prompt:google-search:golang wasm" {
+		t.Fatalf("action = %q, want google prompt action", result.Action)
+	}
+	if s.PromptMode != "" {
+		t.Fatal("prompt mode still active after enter")
+	}
+	if string(ctx.Query) != "wiki" || ctx.TreeCursor != beforeCursor || !ctx.SearchActive || ctx.NavMode {
+		t.Fatalf("tree state changed: query=%q cursor=%d search=%v nav=%v", string(ctx.Query), ctx.TreeCursor, ctx.SearchActive, ctx.NavMode)
+	}
+}
+
+func TestPromptModeEscapeRestoresTreeState(t *testing.T) {
+	s, searchCols, cfg := testTreeState(t)
+	ctx := s.TopCtx()
+	ctx.Query = []rune("hacker")
+	ctx.Cursor = len(ctx.Query)
+	ctx.SearchActive = true
+	FilterItems(s, cfg, searchCols)
+	SyncTreeCursorToTopMatch(s)
+	beforeCursor := ctx.TreeCursor
+
+	s.EnterPromptMode("google", "google-search", 'G', "search Google...")
+	_ = HandleUnifiedKeyResult(s, tcell.KeyRune, 'x', false, cfg, searchCols)
+	result := HandleUnifiedKeyResult(s, tcell.KeyEscape, 0, false, cfg, searchCols)
+	if result.Action != "" {
+		t.Fatalf("escape emitted action %q", result.Action)
+	}
+	if s.PromptMode != "" || len(s.PromptQuery) != 0 {
+		t.Fatalf("prompt mode not cleared: mode=%q query=%q", s.PromptMode, string(s.PromptQuery))
+	}
+	if string(ctx.Query) != "hacker" || ctx.TreeCursor != beforeCursor || !ctx.SearchActive {
+		t.Fatalf("tree state changed: query=%q cursor=%d search=%v", string(ctx.Query), ctx.TreeCursor, ctx.SearchActive)
+	}
+}

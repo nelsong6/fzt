@@ -12,7 +12,7 @@ import (
 type ContextKind int
 
 const (
-	ContextNormal  ContextKind = iota
+	ContextNormal ContextKind = iota
 	ContextCommand
 )
 
@@ -74,31 +74,40 @@ type CommandItem struct {
 
 // State holds the context stack and global flags.
 type State struct {
-	Contexts         []TreeContext  // context stack. Index 0 = primary dataset. Command palette pushes on top. TopCtx() returns active (top) context.
-	Cancelled        bool           // set by Escape from root — signals render loop to exit
-	VersionRegistry  []string       // ordered version strings (frontend + engine). Consumed by the `version` palette leaves. Built by InjectCommandFolder.
-	TitleOverride    string         // when non-empty, replaces the default title in the border. Used as a console output line.
-	TitleStyle       int            // 0=default (cyan/bold), 1=success (green), 2=error (red), 3=neutral (slate), 4=nav-mode (matches prompt NavModeFg), 5=search-mode (matches prompt SearchModeFg). Controls TitleOverride color.
-	Provider         TreeProvider   // optional lazy-loader. PushScope calls LoadChildren when entering a folder with no children.
-	FrontendCommands []CommandItem  // commands for the first level of the : palette. Set by ApplyConfig from Config.FrontendCommands.
-	FrontendName     string         // frontend identifier (e.g. "automate"). Drives scope title ("automate ctl" vs "fzt ctl").
-	FrontendVersion  string         // frontend version string. Registered at index 0 of VersionRegistry.
-	HidePalette      bool           // suppress the visible `:` root row (commands stay reachable by typing `:`). Set from Config.HidePalette.
-	IdentityLabel    string         // loaded identity (e.g. "nelson"). Emitted as a one-shot status by the :whoami palette leaf.
-	SyncIcon         string         // non-empty = show icon in top-right corner of border (e.g. "⟳" when sync available)
-	SyncNextCheck    int64          // unix timestamp — when the next background sync check fires (0 = disabled)
-	SyncTimerShown   bool           // true = show countdown to next sync check in the title bar
-	JWTSecret        string         // JWT signing secret from OS credential store, set by validate command
-	ConfigDir        string         // directory containing sync state files (.identity, identities.json, cache)
-	EditMode         string         // active edit action: "add-after", "add-folder", "rename", "delete", "inspect", "" = none
-	EditBuffer       []rune         // text buffer for rename mode
-	EditTargetIdx    int            // item index being renamed (for restoring on cancel)
-	EditOrigName     string         // original name before rename (for restoring on cancel)
-	Dirty            bool           // unsaved changes exist
-	MenuVersion      int            // last known version from API, used for conflict detection on save
-	InspectTargetIdx int            // item being inspected (-1 = none)
-	InspectItemIdxs  []int          // indices of temporary property items in AllItems
-	EnvTags          []string       // environment capabilities for display condition filtering
+	Contexts         []TreeContext // context stack. Index 0 = primary dataset. Command palette pushes on top. TopCtx() returns active (top) context.
+	Cancelled        bool          // set by Escape from root — signals render loop to exit
+	VersionRegistry  []string      // ordered version strings (frontend + engine). Consumed by the `version` palette leaves. Built by InjectCommandFolder.
+	TitleOverride    string        // when non-empty, replaces the default title in the border. Used as a console output line.
+	TitleStyle       int           // 0=default (cyan/bold), 1=success (green), 2=error (red), 3=neutral (slate), 4=nav-mode (matches prompt NavModeFg), 5=search-mode (matches prompt SearchModeFg). Controls TitleOverride color.
+	Provider         TreeProvider  // optional lazy-loader. PushScope calls LoadChildren when entering a folder with no children.
+	FrontendCommands []CommandItem // commands for the first level of the : palette. Set by ApplyConfig from Config.FrontendCommands.
+	FrontendName     string        // frontend identifier (e.g. "automate"). Drives scope title ("automate ctl" vs "fzt ctl").
+	FrontendVersion  string        // frontend version string. Registered at index 0 of VersionRegistry.
+	HidePalette      bool          // suppress the visible `:` root row (commands stay reachable by typing `:`). Set from Config.HidePalette.
+	IdentityLabel    string        // loaded identity (e.g. "nelson"). Emitted as a one-shot status by the :whoami palette leaf.
+	SyncIcon         string        // non-empty = show icon in top-right corner of border (e.g. "⟳" when sync available)
+	SyncNextCheck    int64         // unix timestamp — when the next background sync check fires (0 = disabled)
+	SyncTimerShown   bool          // true = show countdown to next sync check in the title bar
+	JWTSecret        string        // JWT signing secret from OS credential store, set by validate command
+	ConfigDir        string        // directory containing sync state files (.identity, identities.json, cache)
+	EditMode         string        // active edit action: "add-after", "add-folder", "rename", "delete", "inspect", "" = none
+	EditBuffer       []rune        // text buffer for rename mode
+	EditTargetIdx    int           // item index being renamed (for restoring on cancel)
+	EditOrigName     string        // original name before rename (for restoring on cancel)
+	Dirty            bool          // unsaved changes exist
+	MenuVersion      int           // last known version from API, used for conflict detection on save
+	InspectTargetIdx int           // item being inspected (-1 = none)
+	InspectItemIdxs  []int         // indices of temporary property items in AllItems
+	EnvTags          []string      // environment capabilities for display condition filtering
+
+	// PromptMode temporarily takes over the prompt text box for a frontend-owned
+	// action without disturbing tree query/scope/cursor state.
+	PromptMode        string
+	PromptAction      string
+	PromptIcon        rune
+	PromptPlaceholder string
+	PromptQuery       []rune
+	PromptCursor      int
 
 	// State inspector — passive-explorer mode for discovering reachable states.
 	// When StatesBannerOn is true, frontends render Describe() as a banner and
@@ -146,6 +155,24 @@ func (s *State) SetTitle(msg string, style int) {
 // window. Frontends call this each frame and render reverse video if true.
 func (s *State) IsPulsing() bool {
 	return time.Now().UnixMilli() < s.PulseUntil
+}
+
+func (s *State) EnterPromptMode(mode, action string, icon rune, placeholder string) {
+	s.PromptMode = mode
+	s.PromptAction = action
+	s.PromptIcon = icon
+	s.PromptPlaceholder = placeholder
+	s.PromptQuery = nil
+	s.PromptCursor = 0
+}
+
+func (s *State) ExitPromptMode() {
+	s.PromptMode = ""
+	s.PromptAction = ""
+	s.PromptIcon = 0
+	s.PromptPlaceholder = ""
+	s.PromptQuery = nil
+	s.PromptCursor = 0
 }
 
 // ClearTitle removes the title override and any ambient display.
@@ -838,4 +865,3 @@ func BuildScopePath(s *State) string {
 	}
 	return strings.Join(parts, " › ")
 }
-
